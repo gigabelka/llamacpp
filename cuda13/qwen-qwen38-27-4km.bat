@@ -23,7 +23,7 @@ cd /d "%~dp0.."
   -fa on ^
   --no-mmproj ^
   --cache-reuse 256 ^
-  --chat-template-file "..\qwen38.jinja" ^
+  --chat-template-file ".\qwen38.jinja" ^
   --spec-type draft-mtp ^
   --spec-draft-n-max 6 ^
   --spec-draft-p-min 0.5 ^
