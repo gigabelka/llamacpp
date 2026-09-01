@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository. All answers must be in Russian.
 
 ## What this repo is
 
@@ -26,13 +26,13 @@ executing one of the `.bat` files (see below).
 CUDA 12.x vs CUDA 13.x build of `llama-server.exe`. Within each set the scripts
 differ only by model file and the VRAM-sensitive knobs:
 
-| script | model (GGUF) | `-c` | `-ts` | `-ctk`/`-ctv` |
-|---|---|---|---|---|
-| `qwen-qwen38-27-4km.bat`   | lmstudio-community Q4_K_M | 262144 | 17,13 | q8_0 / q8_0 |
-| `unsloth-qwen38-27-3kxl.bat` | unsloth UD-Q3_K_XL | 229376 | 17,13 | f16 / f16 |
-| `unsloth-qwen38-27-4km.bat`  | unsloth UD-Q4_K_M  | 180224 | 17,13 | f16 / f16 |
-| `unsloth-qwen38-27-5km.bat`  | unsloth UD-Q5_K_M  | 262144 | 16,14 | q8_0 / q4_0 |
-| `unsloth-qwen38-27-6km.bat`  | unsloth UD-Q6_K_M  | 65336  | 17,13 | f16 / f16 |
+| script                       | model (GGUF)              | `-c`   | `-ts` | `-ctk`/`-ctv` |
+| ---------------------------- | ------------------------- | ------ | ----- | ------------- |
+| `qwen-qwen38-27-4km.bat`     | lmstudio-community Q4_K_M | 262144 | 17,13 | q8_0 / q8_0   |
+| `unsloth-qwen38-27-3kxl.bat` | unsloth UD-Q3_K_XL        | 229376 | 17,13 | f16 / f16     |
+| `unsloth-qwen38-27-4km.bat`  | unsloth UD-Q4_K_M         | 180224 | 17,13 | f16 / f16     |
+| `unsloth-qwen38-27-5km.bat`  | unsloth UD-Q5_K_M         | 262144 | 16,14 | q8_0 / q4_0   |
+| `unsloth-qwen38-27-6km.bat`  | unsloth UD-Q6_K_M         | 65336  | 17,13 | f16 / f16     |
 
 Everything else (sampling params, `--spec-type draft-mtp`, `-fa on`, `-kvu`,
 `-np 1`, `-ub 256`, thread counts, DRY penalties) is identical across all scripts.
