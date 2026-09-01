@@ -5,7 +5,7 @@ set CUDA_VISIBLE_DEVICES=0,1
 
 cd /d "%~dp0.."
 
-"c:\Llamacpp\cuda12\llama-server.exe" ^
+"c:\Llamacpp\cuda13\llama-server.exe" ^
   -m "c:\Users\viktor\.lmstudio\models\lmstudio-community\Qwen3.8-27B-GGUF\Qwen3.8-27B-Q4_K_M.gguf" ^
   -ngl 99 ^
   --host 127.0.0.1 ^
@@ -39,6 +39,6 @@ cd /d "%~dp0.."
   --dry-base 1.75 ^
   --dry-allowed-length 4 ^
   --dry-penalty-last-n 2048 ^
-  --log-file "c:\Llamacpp\cuda12\llama-server.log"
+  --log-file "c:\Llamacpp\cuda13\llama-server.log"
 
 pause
