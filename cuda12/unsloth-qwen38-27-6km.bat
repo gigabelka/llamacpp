@@ -5,21 +5,21 @@ set CUDA_VISIBLE_DEVICES=0,1
 
 cd /d "%~dp0.."
 
-".\llamacpp\llama-server.exe" ^
-  -m "c:\Users\viktor\.lmstudio\models\lmstudio-community\Qwen3.8-27B-GGUF\Qwen3.8-27B-Q4_K_M.gguf" ^
+"c:\Llamacpp\cuda12\llama-server.exe" ^
+  -m "c:\Users\viktor\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q6_K_M.gguf" ^
   -ngl 99 ^
   --host 127.0.0.1 ^
   --port 1234 ^
   -sm layer ^
   -ts 17,13 ^
-  -c 262144 ^
+  -c 65336 ^
   -np 1 ^
   -kvu ^
   -n -1 ^
   -b 1024 ^
   -ub 256 ^
-  -ctk q8_0 ^
-  -ctv q8_0 ^
+  -ctk f16 ^
+  -ctv f16 ^
   -fa on ^
   --no-mmproj ^
   --cache-reuse 256 ^
@@ -29,7 +29,7 @@ cd /d "%~dp0.."
   --spec-draft-p-min 0.5 ^
   -t 16 ^
   --threads-batch 16 ^
-  --temp 0.15 ^
+  --temp 0.6 ^
   --top-k 20 ^
   --top-p 0.9 ^
   --min-p 0.05 ^

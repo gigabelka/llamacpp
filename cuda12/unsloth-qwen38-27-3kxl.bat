@@ -5,7 +5,7 @@ set CUDA_VISIBLE_DEVICES=0,1
 
 cd /d "%~dp0.."
 
-".\llamacpp\llama-server.exe" ^
+"c:\Llamacpp\cuda12\llama-server.exe" ^
   -m "c:\Users\viktor\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q3_K_XL.gguf" ^
   -ngl 99 ^
   --host 127.0.0.1 ^
