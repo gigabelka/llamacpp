@@ -463,7 +463,10 @@ def vram_budget(model, run, hw):
 
 ## 8. Ссылки на артефакты в этом репозитории
 
-- Рабочие конфиги: [configs/llamacpp-qwen38-27-4km.bat](configs/llamacpp-qwen38-27-4km.bat)
-  (Q4_K_M, кодинг-конфиг: `-c 196608`, `-ts 17,13`, `q8_0/q8_0`; вмещает и `-c 262144`),
-  [configs/llamacpp-qwen38-27-5km.bat](configs/llamacpp-qwen38-27-5km.bat).
-- Пояснения по гибридной архитектуре и подбору `-c`/`-ts` — в [README.md](README.md).
+- Рабочие конфиги (парные наборы под CUDA 12.x / 13.x, `cuda12/` и `cuda13/`):
+  [cuda13/qwen-qwen38-27-4km.bat](cuda13/qwen-qwen38-27-4km.bat)
+  (Q4_K_M: `-c 262144`, `-ts 17,13`, `q8_0/q8_0`),
+  [cuda13/unsloth-qwen38-27-5km.bat](cuda13/unsloth-qwen38-27-5km.bat)
+  (Q5_K_M: `-c 262144`, `-ts 16,14`, `q8_0/q4_0`).
+- Полная таблица различий скриптов, внешние пути и пояснения по гибридной
+  архитектуре и подбору `-c`/`-ts` — в [README.md](README.md).
