@@ -11,7 +11,7 @@ cd /d "%~dp0.."
   --host 127.0.0.1 ^
   --port 1234 ^
   -sm layer ^
-  -ts 11,10,9 ^
+  -ts 12,11,7 ^
   -ot "token_embd.weight=CUDA0" ^
   -c 262144 ^
   -np 1 ^
@@ -28,7 +28,7 @@ cd /d "%~dp0.."
   --chat-template-file ".\qwen38.jinja" ^
   --reasoning-effort medium ^
   --spec-type draft-mtp ^
-  --spec-draft-n-max 2 ^
+  --spec-draft-n-max 3 ^
   --spec-draft-p-min 0.5 ^
   -t 16 ^
   --threads-batch 16 ^
