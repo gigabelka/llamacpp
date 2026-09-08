@@ -6,7 +6,7 @@ set CUDA_VISIBLE_DEVICES=0,1,2
 cd /d "%~dp0.."
 
 "c:\Llamacpp\cuda13\llama-server.exe" ^
-  -m "c:\Users\viktor\.lmstudio\models\lmstudio-community\Qwen3.8-27B-GGUF\Qwen3.8-27B-Q6_K.gguf" ^
+  -m "c:\Users\viktor\.lmstudio\models\unsloth\Qwen3.8-27B-GGUF\Qwen3.8-27B-UD-Q6_K_M.gguf" ^
   -ngl 99 ^
   --host 127.0.0.1 ^
   --port 1234 ^
