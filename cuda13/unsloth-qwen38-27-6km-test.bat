@@ -12,13 +12,13 @@ cd /d "%~dp0.."
   --port 1234 ^
   -sm layer ^
   -ts 11,10,9 ^
-  -c 229376 ^
+  -c 262144 ^
   -np 1 ^
   -kvu ^
   -n -1 ^
   -b 2048 ^
   -ub 256 ^
-  -ctk f16 ^
+  -ctk q8_0 ^
   -ctv q8_0 ^
   -fa on ^
   --no-mmproj ^
