@@ -12,6 +12,7 @@ cd /d "%~dp0.."
   --port 1234 ^
   -sm layer ^
   -ts 11,10,9 ^
+  -ot "token_embd.weight=CUDA0" ^
   -c 262144 ^
   -np 1 ^
   -kvu ^
