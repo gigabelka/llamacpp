@@ -14,7 +14,8 @@ plus two long-form design docs (in Russian):
   min KV quant), and a fully calibrated worked example for `Qwen3.8-27B` on
   2× RTX 5060 Ti 16 GB. Treat this as the authoritative reference when changing
   any `-c`, `-ts`, `-ub`, `-ctk`, or `-ctv` value.
-- `qwen38-27.jinja` — chat template passed to the server via `--chat-template-file`.
+- `qwen38-27.jinja`, `bonsai2-27.jinja` — chat templates passed to the server via
+  `--chat-template-file` (one per model family).
 - `cuda12/*.bat`, `cuda13/*.bat` — the launch scripts.
 
 There is no build, no test suite, no linter. "Running" the project means
@@ -33,9 +34,22 @@ differ only by model file and the VRAM-sensitive knobs:
 | `unsloth-qwen38-27-4km.bat`  | unsloth UD-Q4_K_M         | 180224 | 17,13 | f16 / f16     |
 | `unsloth-qwen38-27-5km.bat`  | unsloth UD-Q5_K_M         | 262144 | 16,14 | q8_0 / q4_0   |
 | `unsloth-qwen38-27-6km.bat`  | unsloth UD-Q6_K_M         | 65336  | 17,13 | f16 / f16     |
+| `prism-bonsai2-27-pq2.bat`   | prism-ml Bonsai-2 PQ2_0   | 262144 | 17,13 | q8_0 / q8_0   |
 
 Everything else (sampling params, `--spec-type draft-mtp`, `-fa on`, `-kvu`,
-`-np 1`, `-ub 256`, thread counts, DRY penalties) is identical across all scripts.
+`-np 1`, `-ub 256`, thread counts, DRY penalties) is identical across the Qwen3.8
+scripts. `prism-bonsai2-27-pq2.bat` is the odd one out:
+
+- it runs `Ternary-Bonsai-2-27B-PQ2_0.gguf` (`c:\Users\viktor\.lmstudio\models\prism-ml\`),
+  same `qwen35` architecture and geometry as Qwen3.8-27B but 64 blocks and **no**
+  `nextn_predict_layers` / MTP tensors — so no `--spec-type draft-mtp` block;
+- `PQ2_0` is a prism-ml quant (ggml tensor type 141/142, `prism.hadamard.*` keys) that
+  upstream llama.cpp rejects: `invalid ggml type 142. should be in [0, 43)`. The script
+  therefore takes the binary directory from a `set LLAMA=` line at the top (default
+  `c:\Llamacpp\prism`) and bails out with a hint if no `llama-server.exe` is there;
+- vision is off (`--no-mmproj`) even though `Ternary-Bonsai-2-27B-mmproj-BF16.gguf`
+  (clip / `qwen3vl_merger`) sits next to the model and `bonsai2-27.jinja` renders
+  image/video blocks — add `--mmproj` to that file to enable it (~0.9 GB VRAM).
 
 **External paths hard-coded in every script** (not in this repo):
 
