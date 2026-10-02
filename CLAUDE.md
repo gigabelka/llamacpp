@@ -14,7 +14,7 @@ plus two long-form design docs (in Russian):
   min KV quant), and a fully calibrated worked example for `Qwen3.8-27B` on
   2× RTX 5060 Ti 16 GB. Treat this as the authoritative reference when changing
   any `-c`, `-ts`, `-ub`, `-ctk`, or `-ctv` value.
-- `qwen38.jinja` — chat template passed to the server via `--chat-template-file`.
+- `qwen38-27.jinja` — chat template passed to the server via `--chat-template-file`.
 - `cuda12/*.bat`, `cuda13/*.bat` — the launch scripts.
 
 There is no build, no test suite, no linter. "Running" the project means
@@ -44,7 +44,7 @@ Everything else (sampling params, `--spec-type draft-mtp`, `-fa on`, `-kvu`,
 - Log: `c:\Llamacpp\cudaXX\llama-server.log`.
 
 Each script does `cd /d "%~dp0.."` so it runs from the repo root, which is why
-`--chat-template-file ".\qwen38.jinja"` resolves.
+`--chat-template-file ".\qwen38-27.jinja"` resolves.
 
 ## Running
 
