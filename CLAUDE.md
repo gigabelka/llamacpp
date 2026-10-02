@@ -52,8 +52,8 @@ scripts. `prism-bonsai2-27-pq2.bat` is the odd one out:
   (clip / `qwen3vl_merger`) sits next to the model and `bonsai2-27.jinja` renders
   image/video blocks — add `--mmproj` to that file to enable it (~0.9 GB VRAM).
 
-`ornith-ornith15-35-8_0.bat` runs a different model family —
-`Ornith-1.5-35B-Q8k.gguf` (`c:\Users\viktor\.lmstudio\models\ornith-ai\Ornith-1.5-35B-A3B-GGUF\`),
+`ornith-ornith15-35-8k.bat` runs a different model family —
+`Ornith-1.5-35B-Q8_0.gguf` (`c:\Users\viktor\.lmstudio\models\ornith-ai\Ornith-1.5-35B-A3B-GGUF\`),
 arch `qwen35moe`, supported by both the cuda12 and cuda13 `llama.dll`:
 
 - MoE (256 experts, 8 active, `expert_ff 512` + a shared expert), `d = 2048`,
