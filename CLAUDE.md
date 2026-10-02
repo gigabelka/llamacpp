@@ -14,8 +14,8 @@ plus two long-form design docs (in Russian):
   min KV quant), and a fully calibrated worked example for `Qwen3.8-27B` on
   2× RTX 5060 Ti 16 GB. Treat this as the authoritative reference when changing
   any `-c`, `-ts`, `-ub`, `-ctk`, or `-ctv` value.
-- `qwen38-27.jinja`, `bonsai2-27.jinja` — chat templates passed to the server via
-  `--chat-template-file` (one per model family).
+- `qwen38-27.jinja`, `bonsai2-27.jinja`, `ornith15-35.jinja` — chat templates passed
+  to the server via `--chat-template-file` (one per model family).
 - `cuda12/*.bat`, `cuda13/*.bat` — the launch scripts.
 
 There is no build, no test suite, no linter. "Running" the project means
@@ -35,6 +35,7 @@ differ only by model file and the VRAM-sensitive knobs:
 | `unsloth-qwen38-27-5km.bat`  | unsloth UD-Q5_K_M         | 262144 | 16,14 | q8_0 / q4_0   |
 | `unsloth-qwen38-27-6km.bat`  | unsloth UD-Q6_K_M         | 65336  | 17,13 | f16 / f16     |
 | `prism-bonsai2-27-pq2.bat`   | prism-ml Bonsai-2 PQ2_0   | 262144 | 17,13 | q8_0 / q8_0   |
+| `ornith-ornith15-35-8k.bat` | ornith-ai Ornith-1.5 Q8_0 | 262144 | 14,13,13 | q8_0 / q8_0 |
 
 Everything else (sampling params, `--spec-type draft-mtp`, `-fa on`, `-kvu`,
 `-np 1`, `-ub 256`, thread counts, DRY penalties) is identical across the Qwen3.8
@@ -50,6 +51,31 @@ scripts. `prism-bonsai2-27-pq2.bat` is the odd one out:
 - vision is off (`--no-mmproj`) even though `Ternary-Bonsai-2-27B-mmproj-BF16.gguf`
   (clip / `qwen3vl_merger`) sits next to the model and `bonsai2-27.jinja` renders
   image/video blocks — add `--mmproj` to that file to enable it (~0.9 GB VRAM).
+
+`ornith-ornith15-35-8_0.bat` runs a different model family —
+`Ornith-1.5-35B-Q8k.gguf` (`c:\Users\viktor\.lmstudio\models\ornith-ai\Ornith-1.5-35B-A3B-GGUF\`),
+arch `qwen35moe`, supported by both the cuda12 and cuda13 `llama.dll`:
+
+- MoE (256 experts, 8 active, `expert_ff 512` + a shared expert), `d = 2048`,
+  40 blocks + `blk.40.nextn.*` (one MTP head, `nextn_predict_layers = 1`), so
+  `--spec-type draft-mtp` applies just like on Qwen3.8-27B. Hybrid as well:
+  `full_attention_interval = 4` → 10 attention layers, 30 SSM layers
+  (`d_inner 4096`, `d_state 128`, `n_group 16`); native context 262144;
+- `n_head_kv = 2` (vs 4 on Qwen3.8-27B) makes KV ~3.2× cheaper —
+  `q8_0/q8_0` costs 10 880 B/token → 2720 MiB at `-c 262144`. The weights are the
+  tight part instead (35.2 GB of the 48 GB across three cards), which is why `-ts`
+  is almost even (`14,13,13`) rather than skewed like the Qwen3.8 configs, and why
+  `-ub` stays at 256. Tighten in the §4 order but start with `-ub` / `-ts`, not
+  `-c` — lowering context barely frees anything here;
+- vision is off (`--no-mmproj`) even though `mmproj-Ornith-1.5-35B-BF16.gguf` sits
+  next to the model and `ornith15-35.jinja` renders image/video blocks — add
+  `--mmproj` to enable it (~0.9 GB VRAM);
+- `Ornith-1.5-35B-Q6_K.gguf` (27.2 GB) is in the same directory if more headroom
+  is needed;
+- measured at `-c 262144 -ts 14,13,13 -ub 256`: `nvidia-smi` 14898 / 15214 / 13914
+  MiB of 16311, nothing on CPU, ~84 t/s generation with MTP accepting ~78 % of
+  drafts. CUDA1 is the tightest card — shift to `14,12,14` if it ever OOMs.
+  `--cache-reuse 256` is accepted but logged as unsupported for this context type.
 
 **External paths hard-coded in every script** (not in this repo):
 
