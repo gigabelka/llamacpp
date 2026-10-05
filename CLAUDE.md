@@ -161,16 +161,29 @@ is the only script with `-ot "token_embd.weight=CUDA0"` and a deliberately skewe
 | `agentworld-35.jinja`   | nothing — no launch script references it (yet)   |
 
 `qwen38-27.jinja` is a **patched** Qwen3.8 template; `qwen38-27-turbo.jinja` is
-close to the stock one shipped inside the GGUF. The patches in the former:
+the DavidAU remix's own (stock) template with the same two message-shape patches
+applied, so both accept the same client payloads. The patches:
 
-- it merges every leading `system`/`developer` message into one system block
-  instead of looking only at `messages[0].role == 'system'`, and renders later
+- merge every leading `system`/`developer` message into one system block instead
+  of looking only at `messages[0].role == 'system'`, and render later
   `system`/`developer` messages as system turns;
-- it does not `raise_exception('No user query found in messages.')` when the last
-  user turn is a `<tool_response>`.
+- remove the guards that an agent client trips: `System message must be at the
+  beginning.` (turbo only — it raised on any `system` past index 0) and
+  `No user query found in messages.` (turbo only — it raised when every `user`
+  turn looked like a `<tool_response>`). Turbo's backward scan that picks the
+  last real (non-`<tool_response>`) user turn is kept; without a match it leaves
+  the index at the last message, which merely keeps `<think>` in every assistant
+  turn.
+
+What still differs between them: `qwen38-27.jinja` validates tool-call names and
+rejects arguments passed as a JSON string, while turbo serialises whatever it is
+given; and turbo picks the last user turn by skipping `<tool_response>`-shaped
+ones, where `qwen38-27.jinja` just takes the last `user` message. The
+`xhigh`/`medium`/`low` set and the three instruction strings are identical in
+both.
 
 Agent clients that send a `developer` role or several system messages need the
-patched variant. Note that the git index still holds the Ornith template as
+patched variant — which now means both Qwen3.8 templates. Note that the git index still holds the Ornith template as
 `Ornith15-35.jinja` while the working tree has `ornith15-35.jinja` — a case-only
 rename Windows git does not notice; keep passing the lowercase name.
 
