@@ -39,7 +39,7 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | `unsloth-qwen38-27-6km.bat`      | unsloth UD-Q6_K_M                       | 0,1   | 65336  | 17,13    | f16 / f16     | 1024 / 256 |
 | `unsloth-qwen38-27-6km-test.bat` | unsloth UD-Q6_K_M                       | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 | `ornith-ornith15-35-8k.bat`      | ornith-ai Ornith-1.5-35B Q8_0           | 0,1,2 | 262144 | 14,13,13 | q8_0 / q8_0   | 2048 / 256 |
-| `davidau-qwen38-27-turbo-6k.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
+| `davidau-qwen38-27-turbo-6k.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 
 Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
@@ -52,10 +52,15 @@ Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
 The scripts fall into two groups, and this is the main thing to keep straight
 when copying one to make another:
 
-- **current profile** (`qwen-*`, `*-6km-test`, `ornith-*`, `davidau-*`):
+- **current profile** (`qwen-*`, `*-6km-test`, `ornith-*`):
   `--jinja` + `--chat-template-file` + `--reasoning-effort medium`,
   model-author sampling defaults (`--temp 1.0 --top-k 20 --top-p 0.95
   --min-p 0.0`), no repeat/DRY penalties, `--spec-draft-n-max 2–3`.
+  `davidau-*` is the current profile tuned for code and deviates on purpose:
+  `--temp 0.6` (the model card's “Thinking Mode (Precise Coding)” set) and
+  `--reasoning-effort xhigh`, with `--repeat-penalty 1.0 --presence-penalty 0.0
+  --frequency-penalty 0.0` spelled out because the author insists penalties stay
+  off on MTP builds. Do not “normalise” it back to `--temp 1.0 / medium`.
 - **older unsloth profile** (`unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat`):
   low temperature (0.15–0.6), `--min-p 0.05`, DRY penalties
   (`--dry-multiplier`, `--dry-base 1.75`, `--dry-allowed-length`,
@@ -97,21 +102,50 @@ arch `qwen35moe`:
 `davidau-qwen38-27-turbo-6k.bat` runs a DavidAU remix of the same Qwen3.8-27B —
 `Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf`
 (`c:\Users\viktor\.lmstudio\models\DavidAU\Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF\`),
-so it is a copy of `qwen-qwen38-27-6k.bat` with a different `-m` and its own template:
+so it started as a copy of `qwen-qwen38-27-6k.bat` but has since been retuned for
+code — it now differs in `-m`, template, `-ts`, `-ub`, sampling, reasoning effort
+and prompt cache:
 
 - arch `qwen35`, 65 blocks (64 + one MTP head, `nextn_predict_layers = 1`) and the
   exact geometry of Qwen3.8-27B (`d 5120`, `n_head 24`, `n_head_kv 4`, `n_ff 17408`,
   `full_attention_interval 4`, native context 262144) — `--spec-type draft-mtp`
   applies unchanged;
-- it passes `qwen38-27-turbo.jinja`, not `qwen38-27.jinja` (see below);
+- it passes `qwen38-27-turbo.jinja`, not `qwen38-27.jinja` (see below); that
+  template accepts only `xhigh` (its default) / `medium` / `low` for
+  `--reasoning-effort` and raises on anything else — note there is **no** `high`.
+  `medium` injects no instruction at all; `xhigh` prepends “think carefully …
+  prioritize correctness” to the system block, which is why the coding config uses
+  it;
 - the weights are 22 920 MiB — ~1 530 MiB heavier than lmstudio's Q6_K (21 392 MiB),
-  which still fits three cards at `-c 262144 -ts 11,10,9 -b 2048 -ub 512`
-  (`W 22 920 + KV 8704 + RS ~600 + CB` ≈ 37–38 GiB of 48). If it OOMs, go
-  `-ub 512` → `256`, then `-ts 12,10,8` (off the Gen4 x4 card), and only then `-c`;
+  so it runs at `-c 262144 -ts 12,11,7 -b 2048 -ub 256`: `12,11,7` + `-ub 256` is
+  the geometry measured fastest on this bench (32.2 vs 30.1 t/s for
+  `11,10,9` + `-ub 512`), and `-ub 256` halves the compute buffer (≈ 1.6 GiB per
+  card, `CALCULATE.md` §6.4) — that is the headroom the heavier weights need.
+  Measured at that setting: `nvidia-smi` 13 304 / 14 069 / 12 382 MiB of 16 311
+  (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
+  with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
+  `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
+- it is the only script with `-cram 24576`: the default 8 GiB prompt cache cannot
+  hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
+  fills with `making room for prompt cache entry, removing oldest entry` and every
+  turn re-prefills the whole prompt (133k tokens ≈ 225 s at ~595 t/s). 24 GiB of
+  the box's 61.6 GiB keeps 4–8 branches hot; the model is fully on GPU, so losing
+  its mmap pages to the cache is harmless;
+- `--cache-reuse` is **not** passed: like on `ornith-*`, the server logs
+  `cache_reuse is not supported by this context, it will be disabled` — a hybrid
+  recurrent context has no KV shifting;
+- at the default verbosity this build prints no `load_tensors` / `llama_kv_cache` /
+  `compute buffer size` lines at all — add `--verbose` when you need the `CALCULATE.md`
+  §4 breakdown, and read card occupancy from `nvidia-smi` otherwise;
+- `--reasoning-preserve` stays at its default (**on**). This is a cache decision,
+  not a quality one: with `--no-reasoning-preserve` the template drops `<think>`
+  from every assistant turn before the last user query, so the prefix is rewritten
+  on each turn and the prompt cache stops hitting;
 - vision is off (`--no-mmproj`) even though `mmproj-F32.gguf` (1.76 GiB) sits next
   to the model;
-- the author's own sampling defaults are baked into the GGUF
-  (`temp 1.0 / top-k 20 / top-p 0.95`) and already match the script.
+- the author's own defaults are baked into the GGUF (`temp 1.0 / top-k 20 /
+  top-p 0.95`); the script overrides `temp` to `0.6` on purpose, because the model
+  card lists 1.0 for general tasks and 0.6 for “precise coding”.
 
 `unsloth-qwen38-27-6km-test.bat` is the three-card experiment for UD-Q6_K_M: it
 is the only script with `-ot "token_embd.weight=CUDA0"` and a deliberately skewed

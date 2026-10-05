@@ -1,5 +1,5 @@
 @echo off
-title LLaMA Server - Qwen 3.8 27B TurboFCF NEO-CODER (Coding Config)
+title LLaMA Server - Qwen 3.8 27B TurboFCF NEO-CODER (Coding Config, xhigh)
 set CUDA_DEVICE_ORDER=PCI_BUS_ID
 set CUDA_VISIBLE_DEVICES=0,1,2
 
@@ -11,29 +11,32 @@ cd /d "%~dp0.."
   --host 127.0.0.1 ^
   --port 1234 ^
   -sm layer ^
-  -ts 11,10,9 ^
+  -ts 12,11,7 ^
   -c 262144 ^
   -np 1 ^
   -kvu ^
   -n -1 ^
   -b 2048 ^
-  -ub 512 ^
+  -ub 256 ^
   -ctk q8_0 ^
   -ctv q8_0 ^
   -fa on ^
   --no-mmproj ^
-  --cache-reuse 256 ^
+  -cram 24576 ^
   --jinja ^
   --chat-template-file ".\qwen38-27-turbo.jinja" ^
-  --reasoning-effort medium ^
+  --reasoning-effort xhigh ^
   --spec-type draft-mtp ^
-  --spec-draft-n-max 2 ^
+  --spec-draft-n-max 3 ^
   --spec-draft-p-min 0.5 ^
   -t 16 ^
   --threads-batch 16 ^
-  --temp 1.0 ^
+  --temp 0.6 ^
   --top-k 20 ^
   --top-p 0.95 ^
   --min-p 0.0 ^
+  --repeat-penalty 1.0 ^
+  --presence-penalty 0.0 ^
+  --frequency-penalty 0.0 ^
   --log-file "c:\Llamacpp\cuda13\llama-server.log"
 pause
