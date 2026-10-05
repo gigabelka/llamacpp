@@ -17,7 +17,7 @@ cd /d "%~dp0.."
   -kvu ^
   -n -1 ^
   -b 2048 ^
-  -ub 256 ^
+  -ub 128 ^
   -ctk q8_0 ^
   -ctv q8_0 ^
   -fa on ^
