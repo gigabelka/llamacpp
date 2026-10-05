@@ -1,7 +1,7 @@
 @echo off
 title LLaMA Server - Qwen 3.8 27B TurboFCF NEO-CODER (Coding Config, xhigh)
 set CUDA_DEVICE_ORDER=PCI_BUS_ID
-set CUDA_VISIBLE_DEVICES=0,1,2
+set CUDA_VISIBLE_DEVICES=0,1
 
 cd /d "%~dp0.."
 
@@ -11,7 +11,7 @@ cd /d "%~dp0.."
   --host 127.0.0.1 ^
   --port 1234 ^
   -sm layer ^
-  -ts 12,11,7 ^
+  -ts 16,14 ^
   -c 262144 ^
   -np 1 ^
   -kvu ^
