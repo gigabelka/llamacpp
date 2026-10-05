@@ -12,49 +12,66 @@ plus two long-form design docs (in Russian):
 - `CALCULATE.md` — the VRAM-budget methodology: formulas for weights / KV cache /
   recurrent state / compute buffer, reverse problems (max `-ngl`, max `-c`,
   min KV quant), and a fully calibrated worked example for `Qwen3.8-27B` on
-  2× RTX 5060 Ti 16 GB. Treat this as the authoritative reference when changing
+  RTX 5060 Ti 16 GB cards. Treat this as the authoritative reference when changing
   any `-c`, `-ts`, `-ub`, `-ctk`, or `-ctv` value.
-- `qwen38-27.jinja`, `bonsai2-27.jinja`, `ornith15-35.jinja` — chat templates passed
-  to the server via `--chat-template-file` (one per model family).
-- `cuda12/*.bat`, `cuda13/*.bat` — the launch scripts.
+- `*.jinja` — chat templates passed to the server via `--chat-template-file`.
+- `cuda13/*.bat` — the launch scripts.
 
 There is no build, no test suite, no linter. "Running" the project means
 executing one of the `.bat` files (see below).
 
 ## Layout of the launch scripts
 
-`cuda12/` and `cuda13/` are **parallel sets** — the same six configs pointed at a
-CUDA 12.x vs CUDA 13.x build of `llama-server.exe`. Within each set the scripts
-differ only by model file and the VRAM-sensitive knobs:
+All scripts live in `cuda13/` and point at the CUDA 13.x build
+(`c:\Llamacpp\cuda13\llama-server.exe`). An earlier `cuda12/` set (the same
+configs against a CUDA 12.x build) has been removed — `README.md` still describes
+it, so trust this file and the actual tree instead.
 
-| script                       | model (GGUF)              | `-c`   | `-ts` | `-ctk`/`-ctv` |
-| ---------------------------- | ------------------------- | ------ | ----- | ------------- |
-| `qwen-qwen38-27-4km.bat`     | lmstudio-community Q4_K_M | 262144 | 17,13 | q8_0 / q8_0   |
-| `unsloth-qwen38-27-3kxl.bat` | unsloth UD-Q3_K_XL        | 229376 | 17,13 | f16 / f16     |
-| `unsloth-qwen38-27-4km.bat`  | unsloth UD-Q4_K_M         | 180224 | 17,13 | f16 / f16     |
-| `unsloth-qwen38-27-5km.bat`  | unsloth UD-Q5_K_M         | 262144 | 16,14 | q8_0 / q4_0   |
-| `unsloth-qwen38-27-6km.bat`  | unsloth UD-Q6_K_M         | 65336  | 17,13 | f16 / f16     |
-| `prism-bonsai2-27-pq2.bat`   | prism-ml Bonsai-2 PQ2_0   | 262144 | 17,13 | q8_0 / q8_0   |
-| `ornith-ornith15-35-8k.bat` | ornith-ai Ornith-1.5 Q8_0 | 262144 | 14,13,13 | q8_0 / q8_0 |
+Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 
-Everything else (sampling params, `--spec-type draft-mtp`, `-fa on`, `-kvu`,
-`-np 1`, `-ub 256`, thread counts, DRY penalties) is identical across the Qwen3.8
-scripts. `prism-bonsai2-27-pq2.bat` is the odd one out:
+| script                           | model (GGUF)                            | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
+| -------------------------------- | --------------------------------------- | ----- | ------ | -------- | ------------- | ---------- |
+| `qwen-qwen38-27-4km.bat`         | lmstudio-community Q4_K_M               | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-6k.bat`          | lmstudio-community Q6_K                 | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
+| `unsloth-qwen38-27-3kxl.bat`     | unsloth UD-Q3_K_XL                      | 0,1   | 229376 | 17,13    | f16 / f16     | 1024 / 256 |
+| `unsloth-qwen38-27-4km.bat`      | unsloth UD-Q4_K_M                       | 0,1   | 180224 | 17,13    | f16 / f16     | 1024 / 256 |
+| `unsloth-qwen38-27-5km.bat`      | unsloth UD-Q5_K_M                       | 0,1   | 262144 | 16,14    | q8_0 / q4_0   | 1024 / 256 |
+| `unsloth-qwen38-27-6km.bat`      | unsloth UD-Q6_K_M                       | 0,1   | 65336  | 17,13    | f16 / f16     | 1024 / 256 |
+| `unsloth-qwen38-27-6km-test.bat` | unsloth UD-Q6_K_M                       | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
+| `ornith-ornith15-35-8k.bat`      | ornith-ai Ornith-1.5-35B Q8_0           | 0,1,2 | 262144 | 14,13,13 | q8_0 / q8_0   | 2048 / 256 |
+| `davidau-qwen38-27-turbo-6k.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
 
-- it runs `Ternary-Bonsai-2-27B-PQ2_0.gguf` (`c:\Users\viktor\.lmstudio\models\prism-ml\`),
-  same `qwen35` architecture and geometry as Qwen3.8-27B but 64 blocks and **no**
-  `nextn_predict_layers` / MTP tensors — so no `--spec-type draft-mtp` block;
-- `PQ2_0` is a prism-ml quant (ggml tensor type 141/142, `prism.hadamard.*` keys) that
-  upstream llama.cpp rejects: `invalid ggml type 142. should be in [0, 43)`. The script
-  therefore takes the binary directory from a `set LLAMA=` line at the top (default
-  `c:\Llamacpp\prism`) and bails out with a hint if no `llama-server.exe` is there;
-- vision is off (`--no-mmproj`) even though `Ternary-Bonsai-2-27B-mmproj-BF16.gguf`
-  (clip / `qwen3vl_merger`) sits next to the model and `bonsai2-27.jinja` renders
-  image/video blocks — add `--mmproj` to that file to enable it (~0.9 GB VRAM).
+Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
+`CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
+Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
+`--cache-reuse 256`, `--no-mmproj`, `--spec-type draft-mtp`, `-t 16`,
+`--threads-batch 16`, port 1234 — is identical across scripts.
+
+### Two sampling/template profiles
+
+The scripts fall into two groups, and this is the main thing to keep straight
+when copying one to make another:
+
+- **current profile** (`qwen-*`, `*-6km-test`, `ornith-*`, `davidau-*`):
+  `--jinja` + `--chat-template-file` + `--reasoning-effort medium`,
+  model-author sampling defaults (`--temp 1.0 --top-k 20 --top-p 0.95
+  --min-p 0.0`), no repeat/DRY penalties, `--spec-draft-n-max 2–3`.
+- **older unsloth profile** (`unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat`):
+  low temperature (0.15–0.6), `--min-p 0.05`, DRY penalties
+  (`--dry-multiplier`, `--dry-base 1.75`, `--dry-allowed-length`,
+  `--dry-penalty-last-n`), `--spec-draft-n-max 4–6`, and **no `--jinja`** —
+  so their `--chat-template-file` has no effect and the GGUF's built-in template
+  is used instead. If a change is meant to affect the chat template on those
+  scripts, add `--jinja` as well.
+
+Deep speculation (`--spec-draft-n-max 6`) in the older profile only pays off on
+trivial prompts; the current profile deliberately keeps it at 2–3.
+
+### Per-model notes
 
 `ornith-ornith15-35-8k.bat` runs a different model family —
 `Ornith-1.5-35B-Q8_0.gguf` (`c:\Users\viktor\.lmstudio\models\ornith-ai\Ornith-1.5-35B-A3B-GGUF\`),
-arch `qwen35moe`, supported by both the cuda12 and cuda13 `llama.dll`:
+arch `qwen35moe`:
 
 - MoE (256 experts, 8 active, `expert_ff 512` + a shared expert), `d = 2048`,
   40 blocks + `blk.40.nextn.*` (one MTP head, `nextn_predict_layers = 1`), so
@@ -77,11 +94,58 @@ arch `qwen35moe`, supported by both the cuda12 and cuda13 `llama.dll`:
   drafts. CUDA1 is the tightest card — shift to `14,12,14` if it ever OOMs.
   `--cache-reuse 256` is accepted but logged as unsupported for this context type.
 
+`davidau-qwen38-27-turbo-6k.bat` runs a DavidAU remix of the same Qwen3.8-27B —
+`Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf`
+(`c:\Users\viktor\.lmstudio\models\DavidAU\Qwen3.8-27B-TURBO-Fable-Cold-Fusion-735-882-Heretic-Uncensored-NEO-CODER-MAX-MTP-GGUF\`),
+so it is a copy of `qwen-qwen38-27-6k.bat` with a different `-m` and its own template:
+
+- arch `qwen35`, 65 blocks (64 + one MTP head, `nextn_predict_layers = 1`) and the
+  exact geometry of Qwen3.8-27B (`d 5120`, `n_head 24`, `n_head_kv 4`, `n_ff 17408`,
+  `full_attention_interval 4`, native context 262144) — `--spec-type draft-mtp`
+  applies unchanged;
+- it passes `qwen38-27-turbo.jinja`, not `qwen38-27.jinja` (see below);
+- the weights are 22 920 MiB — ~1 530 MiB heavier than lmstudio's Q6_K (21 392 MiB),
+  which still fits three cards at `-c 262144 -ts 11,10,9 -b 2048 -ub 512`
+  (`W 22 920 + KV 8704 + RS ~600 + CB` ≈ 37–38 GiB of 48). If it OOMs, go
+  `-ub 512` → `256`, then `-ts 12,10,8` (off the Gen4 x4 card), and only then `-c`;
+- vision is off (`--no-mmproj`) even though `mmproj-F32.gguf` (1.76 GiB) sits next
+  to the model;
+- the author's own sampling defaults are baked into the GGUF
+  (`temp 1.0 / top-k 20 / top-p 0.95`) and already match the script.
+
+`unsloth-qwen38-27-6km-test.bat` is the three-card experiment for UD-Q6_K_M: it
+is the only script with `-ot "token_embd.weight=CUDA0"` and a deliberately skewed
+`-ts 12,11,7` (GPU2 sits on a Gen4 x4 link, so layers are moved off it).
+
+## Chat templates
+
+| file                    | used by                                          |
+| ----------------------- | ------------------------------------------------ |
+| `qwen38-27.jinja`       | all `qwen-*` and `unsloth-*` scripts             |
+| `qwen38-27-turbo.jinja` | `davidau-qwen38-27-turbo-6k.bat`                 |
+| `ornith15-35.jinja`     | `ornith-ornith15-35-8k.bat`                      |
+| `agentworld-35.jinja`   | nothing — no launch script references it (yet)   |
+
+`qwen38-27.jinja` is a **patched** Qwen3.8 template; `qwen38-27-turbo.jinja` is
+close to the stock one shipped inside the GGUF. The patches in the former:
+
+- it merges every leading `system`/`developer` message into one system block
+  instead of looking only at `messages[0].role == 'system'`, and renders later
+  `system`/`developer` messages as system turns;
+- it does not `raise_exception('No user query found in messages.')` when the last
+  user turn is a `<tool_response>`.
+
+Agent clients that send a `developer` role or several system messages need the
+patched variant. Note that the git index still holds the Ornith template as
+`Ornith15-35.jinja` while the working tree has `ornith15-35.jinja` — a case-only
+rename Windows git does not notice; keep passing the lowercase name.
+
 **External paths hard-coded in every script** (not in this repo):
 
-- Binaries: `c:\Llamacpp\cuda12\` / `c:\Llamacpp\cuda13\` (`llama-server.exe` + CUDA/GGML DLLs).
+- Binaries: `c:\Llamacpp\cuda13\` (`llama-server.exe` + CUDA/GGML DLLs).
 - Models: `c:\Users\viktor\.lmstudio\models\...` (LM Studio's model cache).
-- Log: `c:\Llamacpp\cudaXX\llama-server.log`.
+- Log: `c:\Llamacpp\cuda13\llama-server.log` — every script writes to the same
+  file, so it only ever holds the last run.
 
 Each script does `cd /d "%~dp0.."` so it runs from the repo root, which is why
 `--chat-template-file ".\qwen38-27.jinja"` resolves.
@@ -93,14 +157,12 @@ cuda13\unsloth-qwen38-27-4km.bat
 ```
 
 Server comes up at `http://127.0.0.1:1234` (Web UI, `/v1/chat/completions`,
-`/health`). Pick `cuda12` vs `cuda13` to match the installed NVIDIA driver /
-CUDA runtime. `pause` at the end keeps the window open on exit.
+`/health`). Only one script can run at a time — they all bind port 1234 and all
+expect the whole GPU set to be free. `pause` at the end keeps the window open on
+exit.
 
 ## Editing conventions
 
-- A change to one script almost always applies to its counterpart in the other
-  `cudaXX/` directory — keep the pair in sync unless the change is
-  CUDA-version-specific.
 - The model is a **hybrid Transformer + SSM**: only every 4th layer has a KV
   cache; SSM layers hold a fixed-size state that does not grow with context.
   Native context limit is 262144. Before raising `-c` or loosening KV quant,
@@ -108,14 +170,18 @@ CUDA runtime. `pause` at the end keeps the window open on exit.
   failure signatures (`retrying without pipeline parallelism`,
   `cudaMalloc failed`, `CPU model buffer` on `blk.*`) and the tightening order
   (`-c` ↓ → `-ctv` coarser → `-ctk` coarser → `-ub` ↓ → `-ngl` ↓ last) are in §4.
-- `-ts 17,13` deliberately skews layers onto GPU0 because KV / SSM / pipeline
-  compute buffers land on the higher card under `-sm layer`. Re-check card
-  occupancy in `nvidia-smi` after any `-ts`/`-c` change.
-- Target bench: Ryzen 9 9950X (16c/32t), 64 GB DDR5, 2× RTX 5060 Ti 16 GB, no
-  NVLink/P2P, Windows 11 x64. `-t 16` / `--threads-batch 16` and the split
-  values assume this box.
+- On every three-card config `-ctk` must stay `q8_0`: `f16` K has no CUDA kernel
+  and dumps the graph onto the CPU (35 graph splits, all 16 cores pegged, prefill
+  down to ~219 t/s instead of ~898).
+- `-ts` is deliberately skewed — `17,13` on two cards because KV / SSM / pipeline
+  compute buffers land on the higher card under `-sm layer`, and away from GPU2
+  on three cards because it sits on a Gen4 x4 link while the others are Gen5 x8.
+  Re-check card occupancy in `nvidia-smi` after any `-ts`/`-c` change.
+- Target bench: Ryzen 9 9950X (16c/32t), 64 GB DDR5, 3× RTX 5060 Ti 16 GB (two on
+  Gen5 x8, one on Gen4 x4), no NVLink/P2P, Windows 11 x64. `-t 16` /
+  `--threads-batch 16` and the split values assume this box.
 - `README.md` describes an older bundled layout (`configs/`, in-repo `llamacpp/`
-  and `models/` dirs) that no longer matches the actual tree — trust the scripts
-  and `CALCULATE.md` over the README's path examples.
+  and `models/` dirs, a `cuda12/` set) that no longer matches the actual tree —
+  trust the scripts and `CALCULATE.md` over the README's path examples.
 - Prose docs (`README.md`, `CALCULATE.md`) are written in Russian; keep new
   content in the same language as the file you are editing.
