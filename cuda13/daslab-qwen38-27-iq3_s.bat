@@ -1,5 +1,5 @@
 @echo off
-title LLaMA Server - Qwen 3.8 27B Q4_K_M (Coding Config, xhigh)
+title LLaMA Server - Qwen 3.8 27B GSQ-RCO IQ3_S (Coding Config, xhigh)
 set CUDA_DEVICE_ORDER=PCI_BUS_ID
 set CUDA_VISIBLE_DEVICES=0,1
 
@@ -36,5 +36,8 @@ cd /d "%~dp0.."
   --top-k 20 ^
   --top-p 0.95 ^
   --min-p 0.0 ^
+  --repeat-penalty 1.0 ^
+  --presence-penalty 0.0 ^
+  --frequency-penalty 0.0 ^
   --log-file "c:\Llamacpp\cuda13\llama-server.log"
 pause

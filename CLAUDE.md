@@ -29,18 +29,20 @@ it, so trust this file and the actual tree instead.
 
 Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 
-| script                           | model (GGUF)                            | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
-| -------------------------------- | --------------------------------------- | ----- | ------ | -------- | ------------- | ---------- |
-| `qwen-qwen38-27-4km.bat`         | lmstudio-community Q4_K_M               | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
-| `qwen-qwen38-27-6k.bat`          | lmstudio-community Q6_K                 | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
-| `unsloth-qwen38-27-3kxl.bat`     | unsloth UD-Q3_K_XL                      | 0,1   | 229376 | 17,13    | f16 / f16     | 1024 / 256 |
-| `unsloth-qwen38-27-4km.bat`      | unsloth UD-Q4_K_M                       | 0,1   | 180224 | 17,13    | f16 / f16     | 1024 / 256 |
-| `unsloth-qwen38-27-5km.bat`      | unsloth UD-Q5_K_M                       | 0,1   | 262144 | 16,14    | q8_0 / q4_0   | 1024 / 256 |
-| `unsloth-qwen38-27-6km.bat`      | unsloth UD-Q6_K_M                       | 0,1   | 65336  | 17,13    | f16 / f16     | 1024 / 256 |
-| `unsloth-qwen38-27-6km-test.bat` | unsloth UD-Q6_K_M                       | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
-| `ornith-ornith15-35-8k.bat`      | ornith-ai Ornith-1.5-35B Q8_0           | 0,1,2 | 262144 | 14,13,13 | q8_0 / q8_0   | 2048 / 256 |
-| `ornith-ornith15-35-6k.bat`      | ornith-ai Ornith-1.5-35B Q6_K           | 0,1   | 98304  | 14,13    | q8_0 / q4_0   | 2048 / 256 |
-| `davidau-qwen38-27-turbo-6k.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
+| script                             | model (GGUF)                              | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
+| ---------------------------------- | ----------------------------------------- | ----- | ------ | -------- | ------------- | ---------- |
+| `daslab-qwen38-27-iq3_s.bat`       | ISTA-DASLab GSQ-RCO IQ3_S (MTP)           | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-4km.bat`           | lmstudio-community Q4_K_M                 | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-6k.bat`            | lmstudio-community Q6_K                   | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
+| `unsloth-qwen38-27-3kxl.bat`       | unsloth UD-Q3_K_XL                        | 0,1   | 229376 | 17,13    | f16 / f16     | 1024 / 256 |
+| `unsloth-qwen38-27-4km.bat`        | unsloth UD-Q4_K_M                         | 0,1   | 180224 | 17,13    | f16 / f16     | 1024 / 256 |
+| `unsloth-qwen38-27-5km.bat`        | unsloth UD-Q5_K_M                         | 0,1   | 262144 | 16,14    | q8_0 / q4_0   | 1024 / 256 |
+| `unsloth-qwen38-27-6km.bat`        | unsloth UD-Q6_K_M                         | 0,1   | 65336  | 17,13    | f16 / f16     | 1024 / 256 |
+| `unsloth-qwen38-27-6km-test.bat`   | unsloth UD-Q6_K_M                         | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
+| `ornith-ornith15-35-8k.bat`        | ornith-ai Ornith-1.5-35B Q8_0             | 0,1,2 | 262144 | 14,13,13 | q8_0 / q8_0   | 2048 / 256 |
+| `ornith-ornith15-35-6k.bat`        | ornith-ai Ornith-1.5-35B Q6_K             | 0,1   | 98304  | 14,13    | q8_0 / q4_0   | 2048 / 256 |
+| `davidau-qwen38-27-turbo-6k.bat`   | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K   | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
+| `davidau-qwen38-27-turbo-4k_m.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q4_K_M | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 2048 / 128 |
 
 Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
@@ -190,40 +192,107 @@ and prompt cache:
   top-p 0.95`); the script overrides `temp` to `0.6` on purpose, because the model
   card lists 1.0 for general tasks and 0.6 for “precise coding”.
 
+`davidau-qwen38-27-turbo-4k_m.bat` is the same model at the Q4_K_M file
+(`…-MTP-Q4_K_M.gguf`), pulled back onto **two** cards: `-ts 17,13 -c 262144` with
+`-b 2048 -ub 128`. It runs the same code profile as the three-card script
+(`--temp 0.6`, `xhigh`, penalties spelled out) and the same
+`qwen38-27-turbo.jinja`. It has **not** been measured yet — `-ub 128` halves the
+compute buffer relative to `-ub 256`, which is presumably the headroom the
+heavier Q4_K_M weights need, but that is inference, not a logged run.
+
 `unsloth-qwen38-27-6km-test.bat` is the three-card experiment for UD-Q6_K_M: it
 is the only script with `-ot "token_embd.weight=CUDA0"` and a deliberately skewed
 `-ts 12,11,7` (GPU2 sits on a Gen4 x4 link, so layers are moved off it).
 
+`daslab-qwen38-27-iq3_s.bat` runs `Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf`
+(`c:\Users\viktor\.lmstudio\models\ISTA-DASLab\Qwen3.8-27B-GSQ-RCO-GGUF\`) — an
+ISTA DASLab non-uniform per-tensor quantisation (GSQ-RCO picks a separate quant
+type per tensor under a size budget). Geometry is `qwen35`, identical to the
+other Qwen3.8-27B configs, so everything in the Qwen3.8 entries above applies:
+65 blocks (64 + the MTP head at `blk.64.nextn.*`, `nextn_predict_layers = 1`),
+`d 5120`, `n_head_kv 4`, `key_length = value_length = 256`,
+`full_attention_interval 4` → 16 attention layers of 64, native context 262144 —
+hence `--spec-type draft-mtp` applies unchanged. It is the **lightest** Qwen3.8
+config here and the only one with room to spare:
+
+- 12 109 021 184 B = 11.28 GiB total, of which `blk.*` is 10 477.6 MiB and
+  `output.weight` 682.0 MiB (untied, lands on the last card); `token_embd.weight`
+  is 388.4 MiB and stays host-mapped (`CPU_Mapped`), which is normal;
+- so GPU-resident weights are ~11 160 MiB — **3.8 GiB lighter than the Q4_K_M of
+  `qwen-qwen38-27-4km.bat`**, the config it was copied from. Measured with
+  `--verbose` at `-c 262144 -ts 17,13 -q8_0/q8_0 -ub 256`: weights divide almost
+  evenly (`CUDA0 5587.70` + `CUDA1 5571.99`), main KV 8704 MiB
+  (`CUDA0 4896.00` / `CUDA1 3808.00`, 16 layers, 34 816 B/token), RS
+  271.20 + 177.68 MiB, compute buffers `CUDA0 1642.10` / `CUDA1 1597.09` plus the
+  613.03 MiB draft graph. `nvidia-smi` lands at **12 532 / 12 928 MiB** of 16 311
+  nominal (~3.5 / ~3.1 GiB free against the real 16 050 base), with
+  `pipeline parallelism enabled`, `offloaded 66/66 layers to GPU`,
+  `CPU_Mapped 388.38 MiB` (the embedding — normal) and no `CPU model buffer size`
+  for `blk.*`. See `CALCULATE.md` §6.9;
+- `-ts 17,13` is kept verbatim from the Q4_K_M config and is **not** rebalanced
+  despite the lighter weights. Note it skews the *KV/RS/compute* buffers, not the
+  weights: CUDA1 is always the tight card because the MTP draft KV (1024 MiB,
+  **f16**, 1 layer), the draft compute buffer (+613 MiB) and `output.weight`
+  (682 MiB) all land on it, and `-ts 16,14` is known to OOM on this family;
+- that ~3 GiB of slack is deliberately **not** spent on a bigger `-ub` or a finer
+  KV quant. `-ub 256` is the fastest point measured on this bench in the §6
+  calibration (`-ub` has not been re-measured for IQ3_S) and `f16` KV would need
+  +7680 MiB; `q8_0/q8_0` is already the near-lossless point. If prefill speed
+  ever matters more than margin, `-ub 384` then `-ub 512` are the levers — the
+  latter leaves only ~870 MiB on CUDA1;
+- measured generation on a code prompt: **44.6 t/s** with MTP accepting 78.5 % of
+  drafts. Thinking is on and unlimited, so a short `max_tokens` is consumed
+  entirely by `reasoning_content` — budget accordingly when testing;
+- `--reasoning-effort xhigh` **is** the maximum, not a middle setting. The flag
+  itself accepts `minimal/low/medium/high/xhigh/max`, but
+  `qwen38-27-gsq-rco.jinja` allows only `('xhigh', 'medium', 'low')` and raises on
+  anything else, so `high` and `max` produce a template error rather than deeper
+  thinking. `--reasoning-budget -1` is the unrestricted default, spelled out;
+- the GSQ-RCO model's own sampling defaults are baked into the GGUF as
+  `temp 1.0 / top-k 20 / top-p 0.95 / min-p 0.0`; the script overrides `temp` to
+  `0.6` for the repo's code profile (the model card recommends no sampling values
+  at all) and spells out the zero penalties, as on the other MTP configs;
+- vision is off (`--no-mmproj`) even though `mmproj-Qwen3.8-27B-BF16.gguf`
+  (931 MB) sits next to the model — add `--mmproj` to enable it, the ~910 MiB
+  still fits in the slack;
+- if it ever OOMs: `-ub 128` → `-ctv q4_0` → `-ot "output.weight=CUDA0"` →
+  `-c 229376` → `-ngl` last.
+
 ## Chat templates
 
-| file                    | used by                                          |
-| ----------------------- | ------------------------------------------------ |
-| `qwen38-27.jinja`       | all `qwen-*` and `unsloth-*` scripts             |
-| `qwen38-27-turbo.jinja` | `davidau-qwen38-27-turbo-6k.bat`                 |
-| `ornith15-35.jinja`     | both `ornith-ornith15-35-*.bat` scripts          |
-| `agentworld-35.jinja`   | nothing — no launch script references it (yet)   |
+| file                      | used by                                        |
+| ------------------------- | ---------------------------------------------- |
+| `qwen38-27.jinja`         | all `qwen-*` and `unsloth-*` scripts           |
+| `qwen38-27-turbo.jinja`   | both `davidau-qwen38-27-turbo-*.bat` scripts   |
+| `qwen38-27-gsq-rco.jinja` | `daslab-qwen38-27-iq3_s.bat`                   |
+| `ornith15-35.jinja`       | both `ornith-ornith15-35-*.bat` scripts        |
+| `agentworld-35.jinja`     | nothing — no launch script references it (yet) |
 
 `qwen38-27.jinja` is a **patched** Qwen3.8 template; `qwen38-27-turbo.jinja` is
-the DavidAU remix's own (stock) template with the same two message-shape patches
-applied, so both accept the same client payloads. The patches:
+the DavidAU remix's own (stock) template and `qwen38-27-gsq-rco.jinja` is the
+ISTA-DASLab GSQ-RCO model's own (stock) template, each with the same two
+message-shape patches applied, so all three accept the same client payloads.
+`qwen38-27-gsq-rco.jinja` came out byte-identical to `qwen38-27-turbo.jinja`
+after patching — the two stock templates differed on nothing else. The patches:
 
 - merge every leading `system`/`developer` message into one system block instead
   of looking only at `messages[0].role == 'system'`, and render later
   `system`/`developer` messages as system turns;
 - remove the guards that an agent client trips: `System message must be at the
-  beginning.` (turbo only — it raised on any `system` past index 0) and
-  `No user query found in messages.` (turbo only — it raised when every `user`
-  turn looked like a `<tool_response>`). Turbo's backward scan that picks the
-  last real (non-`<tool_response>`) user turn is kept; without a match it leaves
-  the index at the last message, which merely keeps `<think>` in every assistant
-  turn.
+  beginning.` (turbo and gsq-rco only — it raised on any `system` past index 0)
+  and `No user query found in messages.` (turbo and gsq-rco only — it raised when
+  every `user` turn looked like a `<tool_response>`). Turbo's and gsq-rco's
+  backward scan that picks the last real (non-`<tool_response>`) user turn is
+  kept; without a match it leaves the index at the last message, which merely
+  keeps `<think>` in every assistant turn.
 
 What still differs between them: `qwen38-27.jinja` validates tool-call names and
-rejects arguments passed as a JSON string, while turbo serialises whatever it is
-given; and turbo picks the last user turn by skipping `<tool_response>`-shaped
-ones, where `qwen38-27.jinja` just takes the last `user` message. The
-`xhigh`/`medium`/`low` set and the three instruction strings are identical in
-both.
+rejects arguments passed as a JSON string, while turbo and gsq-rco serialise
+whatever they are given; and turbo/gsq-rco pick the last user turn by skipping
+`<tool_response>`-shaped ones, where `qwen38-27.jinja` just takes the last `user`
+message. The `xhigh`/`medium`/`low` set and the three instruction strings are
+identical in all three — so `--reasoning-effort high` and `max`, which the
+server-side flag accepts, fail in every Qwen3.8 template.
 
 `ornith15-35.jinja` has since been given the same `reasoning_effort` block,
 copied verbatim from `qwen38-27-turbo.jinja`: default `xhigh`, the same validation
