@@ -19,7 +19,7 @@ cd /d "%~dp0.."
   -b 2048 ^
   -ub 256 ^
   -ctk q8_0 ^
-  -ctv q4_0 ^
+  -ctv q8_0 ^
   -fa on ^
   --no-mmproj ^
   --cache-reuse 256 ^
