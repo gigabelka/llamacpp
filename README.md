@@ -20,7 +20,7 @@ Transformer + SSM модель) в режиме локального OpenAI-со
 │   └── unsloth-qwen38-27-6km.bat   # unsloth UD-Q6_K_M
 ├── cuda13/                     # Те же 5 конфигов против сборки под CUDA 13.x
 │   └── … (те же имена файлов)
-├── qwen38-27.jinja                # Jinja-шаблон чата (--chat-template-file)
+├── qwen-general.jinja             # Jinja-шаблон чата (--chat-template-file)
 ├── CALCULATE.md                # Методика расчёта бюджета VRAM и выгрузки слоёв
 └── README.md
 ```
@@ -34,7 +34,7 @@ Transformer + SSM модель) в режиме локального OpenAI-со
 
 Общие параметры у всех скриптов одинаковы (`-ngl 99`, `-sm layer`, `-fa on`,
 `-kvu`, `-np 1`, `-b 1024`, `-ub 256`, `--spec-type draft-mtp`, `-t 16`,
-`--threads-batch 16`, DRY-штрафы, `--chat-template-file .\qwen38-27.jinja`,
+`--threads-batch 16`, DRY-штрафы, `--chat-template-file .\qwen-general.jinja`,
 сервер на `127.0.0.1:1234`). Различаются модель и параметры под бюджет VRAM:
 
 | Скрипт | Модель (GGUF) | `-c` | `-ts` | `-ctk`/`-ctv` | `--temp` |
@@ -72,7 +72,7 @@ VRAM, без выгрузки слоёв на CPU**. Расчёт и обосн�
   фиксированного размера, не растущее с длиной контекста. Нативный лимит
   контекста — **262144** токена. Приоритет ужимания при нехватке VRAM (сохраняя
   `-ngl ≥ L+1`): `-c` ↓ → `-ctv` грубее → `-ctk` грубее → `-ub` ↓ → `-ngl` ↓.
-- **Кастомный шаблон чата (`qwen38-27.jinja`):** форматирование сообщений,
+- **Кастомный шаблон чата (`qwen-general.jinja`):** форматирование сообщений,
   системных инструкций и vision-заглушек.
 - **Совместимость с OpenAI API:** `/v1/chat/completions`, `/v1/models`,
   `/v1/completions`, Web UI, `/health` — интеграция с Open WebUI, SillyTavern,
@@ -93,7 +93,7 @@ VRAM, без выгрузки слоёв на CPU**. Расчёт и обосн�
    ```
 
    Скрипт делает `cd /d "%~dp0.."` (переходит в корень репозитория), поэтому
-   `--chat-template-file ".\qwen38-27.jinja"` резолвится относительно корня.
+   `--chat-template-file ".\qwen-general.jinja"` резолвится относительно корня.
 
 После запуска сервер доступен по адресу:
 

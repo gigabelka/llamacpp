@@ -66,7 +66,7 @@ when copying one to make another:
   off on MTP builds. Do not “normalise” it back to `--temp 1.0 / medium`.
   `ornith-ornith15-35-6k.bat` is tuned for code the same way and deviates too:
   `--temp 0.6` and `--reasoning-effort xhigh`. Unlike the Qwen scripts, its
-  effort flag only does something because `ornith15-35.jinja` now carries the
+  effort flag only does something because `qwen-general.jinja` carries the
   same `xhigh`/`medium`/`low` block — see “Chat templates”.
   `qwen-qwen38-27-4km.bat` is the same code tuning on the two-card Q4_K_M:
   `--temp 0.6` and `--reasoning-effort xhigh`, plus `--reasoning-budget -1`
@@ -105,7 +105,7 @@ arch `qwen35moe`:
   `-ub` stays at 256. Tighten in the §4 order but start with `-ub` / `-ts`, not
   `-c` — lowering context barely frees anything here;
 - vision is off (`--no-mmproj`) even though `mmproj-Ornith-1.5-35B-BF16.gguf` sits
-  next to the model and `ornith15-35.jinja` renders image/video blocks — add
+  next to the model and `qwen-general.jinja` renders image/video blocks — add
   `--mmproj` to enable it (~0.9 GB VRAM);
 - `Ornith-1.5-35B-Q6_K.gguf` (27.2 GB) is in the same directory if more headroom
   is needed;
@@ -141,7 +141,7 @@ accurate to ~270 MiB — puts CUDA1 at ~1142 MiB over. Hence:
   or a third card;
 - code profile: `--temp 0.6` (the card lists 0.6 for general work and 1.0 only
   for benchmark reproduction) and `--reasoning-effort xhigh`. This script is the
-  reason `ornith15-35.jinja` gained `reasoning_effort` support at all.
+  reason the shared template gained `reasoning_effort` support at all.
 
 `davidau-qwen38-27-turbo-6k.bat` runs a DavidAU remix of the same Qwen3.8-27B —
 `Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf`
@@ -154,7 +154,7 @@ and prompt cache:
   exact geometry of Qwen3.8-27B (`d 5120`, `n_head 24`, `n_head_kv 4`, `n_ff 17408`,
   `full_attention_interval 4`, native context 262144) — `--spec-type draft-mtp`
   applies unchanged;
-- it passes `qwen38-27-turbo.jinja`, not `qwen38-27.jinja` (see below); that
+- it passes `qwen-general.jinja`, like every script (see below); that
   template accepts only `xhigh` (its default) / `medium` / `low` for
   `--reasoning-effort` and raises on anything else — note there is **no** `high`.
   `medium` injects no instruction at all; `xhigh` prepends “think carefully …
@@ -196,7 +196,7 @@ and prompt cache:
 (`…-MTP-Q4_K_M.gguf`), pulled back onto **two** cards: `-ts 17,13 -c 262144` with
 `-b 2048 -ub 128`. It runs the same code profile as the three-card script
 (`--temp 0.6`, `xhigh`, penalties spelled out) and the same
-`qwen38-27-turbo.jinja`. It has **not** been measured yet — `-ub 128` halves the
+`qwen-general.jinja`. It has **not** been measured yet — `-ub 128` halves the
 compute buffer relative to `-ub 256`, which is presumably the headroom the
 heavier Q4_K_M weights need, but that is inference, not a logged run.
 
@@ -245,7 +245,7 @@ config here and the only one with room to spare:
   entirely by `reasoning_content` — budget accordingly when testing;
 - `--reasoning-effort xhigh` **is** the maximum, not a middle setting. The flag
   itself accepts `minimal/low/medium/high/xhigh/max`, but
-  `qwen38-27-gsq-rco.jinja` allows only `('xhigh', 'medium', 'low')` and raises on
+  `qwen-general.jinja` allows only `('xhigh', 'medium', 'low')` and raises on
   anything else, so `high` and `max` produce a template error rather than deeper
   thinking. `--reasoning-budget -1` is the unrestricted default, spelled out;
 - the GSQ-RCO model's own sampling defaults are baked into the GGUF as
@@ -260,57 +260,73 @@ config here and the only one with room to spare:
 
 ## Chat templates
 
-| file                      | used by                                        |
-| ------------------------- | ---------------------------------------------- |
-| `qwen38-27.jinja`         | all `qwen-*` and `unsloth-*` scripts           |
-| `qwen38-27-turbo.jinja`   | both `davidau-qwen38-27-turbo-*.bat` scripts   |
-| `qwen38-27-gsq-rco.jinja` | `daslab-qwen38-27-iq3_s.bat`                   |
-| `ornith15-35.jinja`       | both `ornith-ornith15-35-*.bat` scripts        |
-| `agentworld-35.jinja`     | nothing — no launch script references it (yet) |
+| file                  | used by                                        |
+| --------------------- | ---------------------------------------------- |
+| `qwen-general.jinja`  | every script in `cuda13/`                      |
+| `agentworld-35.jinja` | nothing — no launch script references it (yet) |
 
-`qwen38-27.jinja` is a **patched** Qwen3.8 template; `qwen38-27-turbo.jinja` is
-the DavidAU remix's own (stock) template and `qwen38-27-gsq-rco.jinja` is the
-ISTA-DASLab GSQ-RCO model's own (stock) template, each with the same two
-message-shape patches applied, so all three accept the same client payloads.
-`qwen38-27-gsq-rco.jinja` came out byte-identical to `qwen38-27-turbo.jinja`
-after patching — the two stock templates differed on nothing else. The patches:
+`qwen-general.jinja` is the single merged template. It replaced four
+near-duplicate files (`qwen38-27.jinja`, `qwen38-27-turbo.jinja`,
+`qwen38-27-gsq-rco.jinja`, `ornith15-35.jinja`) that were just different stages of
+patching the same Qwen chatml template — turbo and gsq-rco were already
+byte-identical, and the other two differed by two or three hunks each. The merge
+took turbo as the base and is a **superset**: on every payload except the two
+cases noted below it renders byte-for-byte what the old file for that script
+rendered. It serves both arch families (`qwen35` for the Qwen3.8-27B configs,
+`qwen35moe` for Ornith) — the token set, the tool-call format and the
+`reasoning_effort` block were identical across all four.
 
-- merge every leading `system`/`developer` message into one system block instead
-  of looking only at `messages[0].role == 'system'`, and render later
-  `system`/`developer` messages as system turns;
-- remove the guards that an agent client trips: `System message must be at the
-  beginning.` (turbo and gsq-rco only — it raised on any `system` past index 0)
-  and `No user query found in messages.` (turbo and gsq-rco only — it raised when
-  every `user` turn looked like a `<tool_response>`). Turbo's and gsq-rco's
-  backward scan that picks the last real (non-`<tool_response>`) user turn is
-  kept; without a match it leaves the index at the last message, which merely
-  keeps `<think>` in every assistant turn.
+What it contains:
 
-What still differs between them: `qwen38-27.jinja` validates tool-call names and
-rejects arguments passed as a JSON string, while turbo and gsq-rco serialise
-whatever they are given; and turbo/gsq-rco pick the last user turn by skipping
-`<tool_response>`-shaped ones, where `qwen38-27.jinja` just takes the last `user`
-message. The `xhigh`/`medium`/`low` set and the three instruction strings are
-identical in all three — so `--reasoning-effort high` and `max`, which the
-server-side flag accepts, fail in every Qwen3.8 template.
+- **merged system block** — every leading `system`/`developer` message is folded
+  into one system turn, and later `system`/`developer` messages render as system
+  turns. The old `ornith15-35.jinja` merged only the first two and *silently
+  dropped* a third; this is the one rendering change on `ornith-*` scripts;
+- **no agent-tripping guards** — `System message must be at the beginning.` and
+  `No user query found in messages.` are both gone, so clients that send a
+  `developer` role, several system messages, or a history whose every `user` turn
+  looks like a `<tool_response>` all work;
+- **backward scan for the last real user turn** (turbo's version) — skips
+  `<tool_response>`-shaped turns; without a match it leaves the index at the last
+  message, which merely keeps `<think>` in every assistant turn. Only matters
+  together with `--no-reasoning-preserve`, which no script passes;
+- **`preserve_thinking` is honoured** (turbo's version). The old Ornith template
+  ignored it and always emitted `<think>`; since the default is on and no script
+  passes `--no-reasoning-preserve`, the rendering is the same;
+- **tool-call validation** (from `qwen38-27.jinja`) — raises on a missing function
+  name, and on `arguments` passed as a JSON string or a non-object. The old turbo
+  and Ornith files fed a string straight into `|items` and died with a cryptic
+  error instead;
+- **inline `</think>` fallback** (from `ornith15-35.jinja`) — if an assistant
+  message has no `reasoning_content` but its `content` holds
+  `<think>…</think>`, the reasoning is lifted into the `<think>` block instead of
+  being wrapped in a second empty one. This is the other rendering change, and it
+  fixes a real double-`<think>` bug the turbo/gsq-rco and `qwen38-27` files had;
+- **`reasoning_effort`**: `xhigh` (default) / `medium` / `low`, anything else is a
+  `raise_exception`. So `--reasoning-effort high` and `max`, which the server-side
+  flag accepts, produce a template error — there is **no** `high`. `medium`
+  injects no instruction at all; `xhigh` prepends “think carefully … prioritize
+  correctness” to the system block, which is why the coding configs use it. The
+  block is gated on `enable_thinking`;
+- `render_content` with image/video branches (and a `raise_exception` if either
+  appears in a system message), though every script runs `--no-mmproj`.
 
-`ornith15-35.jinja` has since been given the same `reasoning_effort` block,
-copied verbatim from `qwen38-27-turbo.jinja`: default `xhigh`, the same validation
-`raise_exception` (so `high` is **not** a valid value anywhere), the same xhigh
-and low instruction strings, and `medium` injecting nothing. Before this it
-ignored the variable entirely, which made `--reasoning-effort` a silent no-op on
-both Ornith scripts. Consequences worth knowing:
+Caveats that survive the merge:
 
-- the model itself has no effort tiers — the card says thinking is simply on by
-  default — so this is a prompt-level instruction, not a runtime dial;
-- `ornith-ornith15-35-8k.bat` still passes `medium`, so its rendered prompt is
-  unchanged; switching it to `xhigh` is a one-line edit if wanted;
-- the block is gated on `enable_thinking` exactly as in the Qwen templates.
-
-Agent clients that send a `developer` role or several system messages need the
-patched variant — which now means both Qwen3.8 templates. Note that the git index still holds the Ornith template as
-`Ornith15-35.jinja` while the working tree has `ornith15-35.jinja` — a case-only
-rename Windows git does not notice; keep passing the lowercase name.
+- `unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat` have **no `--jinja`**, so
+  `--chat-template-file` does nothing there and the GGUF's built-in template is
+  used. They point at `qwen-general.jinja` only so no script references a deleted
+  file. Adding `--jinja` to them is a separate decision — it would change their
+  rendered prompt;
+- on the Ornith models `--reasoning-effort` works *only* because of this
+  template's `reasoning_effort` block. The model itself has no effort tiers (the
+  card says thinking is simply on by default), so this is a prompt-level
+  instruction, not a runtime dial. `ornith-ornith15-35-8k.bat` passes `medium`,
+  i.e. no injected instruction;
+- `agentworld-35.jinja` was deliberately left out of the merge: no script
+  references it, and it is an unpatched older base (no `reasoning_effort`, only
+  `messages[0]` as system) for a different family — it has an audio branch
+  (`<|audio_start|>`) the Qwen3.8/Ornith vocabularies do not carry.
 
 **External paths hard-coded in every script** (not in this repo):
 
@@ -320,7 +336,7 @@ rename Windows git does not notice; keep passing the lowercase name.
   file, so it only ever holds the last run.
 
 Each script does `cd /d "%~dp0.."` so it runs from the repo root, which is why
-`--chat-template-file ".\qwen38-27.jinja"` resolves.
+`--chat-template-file ".\qwen-general.jinja"` resolves.
 
 ## Running
 

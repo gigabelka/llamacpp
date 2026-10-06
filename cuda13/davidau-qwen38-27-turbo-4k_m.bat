@@ -24,7 +24,7 @@ cd /d "%~dp0.."
   --no-mmproj ^
   -cram 24576 ^
   --jinja ^
-  --chat-template-file ".\qwen38-27-turbo.jinja" ^
+  --chat-template-file ".\qwen-general.jinja" ^
   --reasoning-effort xhigh ^
   --spec-type draft-mtp ^
   --spec-draft-n-max 3 ^
