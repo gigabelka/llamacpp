@@ -66,6 +66,14 @@ when copying one to make another:
   `--temp 0.6` and `--reasoning-effort xhigh`. Unlike the Qwen scripts, its
   effort flag only does something because `ornith15-35.jinja` now carries the
   same `xhigh`/`medium`/`low` block — see “Chat templates”.
+  `qwen-qwen38-27-4km.bat` is the same code tuning on the two-card Q4_K_M:
+  `--temp 0.6` and `--reasoning-effort xhigh`, plus `--reasoning-budget -1`
+  spelled out (“think without a limit” — already the default) and `-cram 24576`
+  in place of the no-op `--cache-reuse 256`. The official Qwen3.8-27B card gives
+  `1.0` for thinking mode, so the `0.6` here is this repo's code profile rather
+  than the card's recommendation — deliberate, do not “normalise” it away. Its
+  VRAM knobs are untouched: `-c 262144 -ts 17,13` at `q8_0/q8_0` is the measured
+  §6 point in `CALCULATE.md`.
 - **older unsloth profile** (`unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat`):
   low temperature (0.15–0.6), `--min-p 0.05`, DRY penalties
   (`--dry-multiplier`, `--dry-base 1.75`, `--dry-allowed-length`,
@@ -159,7 +167,8 @@ and prompt cache:
   (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
   with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
   `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
-- it is the only script with `-cram 24576`: the default 8 GiB prompt cache cannot
+- it is one of two scripts with `-cram 24576` (the other is
+  `qwen-qwen38-27-4km.bat`): the default 8 GiB prompt cache cannot
   hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
   fills with `making room for prompt cache entry, removing oldest entry` and every
   turn re-prefills the whole prompt (133k tokens ≈ 225 s at ~595 t/s). 24 GiB of

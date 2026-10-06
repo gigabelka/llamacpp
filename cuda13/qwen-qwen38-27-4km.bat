@@ -1,5 +1,5 @@
 @echo off
-title LLaMA Server - Qwen 3.8 27B (Coding Config)
+title LLaMA Server - Qwen 3.8 27B Q4_K_M (Coding Config, xhigh)
 set CUDA_DEVICE_ORDER=PCI_BUS_ID
 set CUDA_VISIBLE_DEVICES=0,1
 
@@ -22,19 +22,19 @@ cd /d "%~dp0.."
   -ctv q8_0 ^
   -fa on ^
   --no-mmproj ^
-  --cache-reuse 256 ^
+  -cram 24576 ^
   --jinja ^
   --chat-template-file ".\qwen38-27.jinja" ^
-  --reasoning-effort medium ^
+  --reasoning-effort xhigh ^
+  --reasoning-budget -1 ^
   --spec-type draft-mtp ^
   --spec-draft-n-max 2 ^
   --spec-draft-p-min 0.5 ^
   -t 16 ^
   --threads-batch 16 ^
-  --temp 1.0 ^
+  --temp 0.6 ^
   --top-k 20 ^
   --top-p 0.95 ^
   --min-p 0.0 ^
   --log-file "c:\Llamacpp\cuda13\llama-server.log"
-
 pause
