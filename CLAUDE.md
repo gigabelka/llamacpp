@@ -56,22 +56,22 @@ The scripts fall into two groups, and this is the main thing to keep straight
 when copying one to make another:
 
 - **current profile** (`qwen-*`, `*-6km-test`, `ornith-*`):
-  `--jinja` + `--chat-template-file` + `--reasoning-effort medium`,
-  model-author sampling defaults (`--temp 1.0 --top-k 20 --top-p 0.95
-  --min-p 0.0`), no repeat/DRY penalties, `--spec-draft-n-max 2–3`.
+  `--jinja` + `--chat-template-file`, model-author sampling defaults
+  (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties,
+  `--spec-draft-n-max 2–3`. Every script passes `--reasoning-effort xhigh`, but
+  that flag is a declaration of intent only — the level is hard-coded in
+  `qwen-general.jinja` and cannot be changed from outside, see “Chat
+  templates”.
   `davidau-*` is the current profile tuned for code and deviates on purpose:
-  `--temp 0.6` (the model card's “Thinking Mode (Precise Coding)” set) and
-  `--reasoning-effort xhigh`, with `--repeat-penalty 1.0 --presence-penalty 0.0
-  --frequency-penalty 0.0` spelled out because the author insists penalties stay
-  off on MTP builds. Do not “normalise” it back to `--temp 1.0 / medium`.
+  `--temp 0.6` (the model card's “Thinking Mode (Precise Coding)” set), with
+  `--repeat-penalty 1.0 --presence-penalty 0.0 --frequency-penalty 0.0` spelled
+  out because the author insists penalties stay off on MTP builds. Do not
+  “normalise” it back to `--temp 1.0`.
   `ornith-ornith15-35-6k.bat` is tuned for code the same way and deviates too:
-  `--temp 0.6` and `--reasoning-effort xhigh`. Unlike the Qwen scripts, its
-  effort flag only does something because `qwen-general.jinja` carries the
-  same `xhigh`/`medium`/`low` block — see “Chat templates”.
-  `qwen-qwen38-27-4km.bat` is the same code tuning on the two-card Q4_K_M:
-  `--temp 0.6` and `--reasoning-effort xhigh`, plus `--reasoning-budget -1`
-  spelled out (“think without a limit” — already the default) and `-cram 24576`
-  in place of the no-op `--cache-reuse 256`. The official Qwen3.8-27B card gives
+  `--temp 0.6`. `qwen-qwen38-27-4km.bat` is the same code tuning on the two-card
+  Q4_K_M: `--temp 0.6`, plus `--reasoning-budget -1` spelled out (“think without
+  a limit” — already the default) and `-cram 24576` in place of the no-op
+  `--cache-reuse 256`. The official Qwen3.8-27B card gives
   `1.0` for thinking mode, so the `0.6` here is this repo's code profile rather
   than the card's recommendation — deliberate, do not “normalise” it away. Its
   VRAM knobs are untouched: `-c 262144 -ts 17,13` at `q8_0/q8_0` is the measured
@@ -79,10 +79,14 @@ when copying one to make another:
 - **older unsloth profile** (`unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat`):
   low temperature (0.15–0.6), `--min-p 0.05`, DRY penalties
   (`--dry-multiplier`, `--dry-base 1.75`, `--dry-allowed-length`,
-  `--dry-penalty-last-n`), `--spec-draft-n-max 4–6`, and **no `--jinja`** —
-  so their `--chat-template-file` has no effect and the GGUF's built-in template
-  is used instead. If a change is meant to affect the chat template on those
-  scripts, add `--jinja` as well.
+  `--dry-penalty-last-n`), `--spec-draft-n-max 4–6`, and no explicit `--jinja`.
+  That omission does **not** disable the template: in this build `--jinja`
+  defaults to *enabled* (`--help`: “whether to use jinja template engine for
+  chat (default: enabled)”), so `--chat-template-file` applies to these four
+  exactly as it does everywhere else — verified by starting a config with the
+  flag stripped and getting our template's output, not the GGUF's. Only
+  `--no-jinja` would turn it off. (An earlier note here claimed the opposite;
+  it was true of an older build.)
 
 Deep speculation (`--spec-draft-n-max 6`) in the older profile only pays off on
 trivial prompts; the current profile deliberately keeps it at 2–3.
@@ -140,8 +144,10 @@ accurate to ~270 MiB — puts CUDA1 at ~1142 MiB over. Hence:
   (25.3 GB, needs downloading — budget says it fits with ~700–1000 MiB to spare)
   or a third card;
 - code profile: `--temp 0.6` (the card lists 0.6 for general work and 1.0 only
-  for benchmark reproduction) and `--reasoning-effort xhigh`. This script is the
-  reason the shared template gained `reasoning_effort` support at all.
+  for benchmark reproduction) and `--reasoning-effort xhigh`. This script was
+  historically the reason the Ornith template gained a `reasoning_effort` block at
+  all; the level is now hard-coded in `qwen-general.jinja`, so the flag documents
+  the intent while the template enforces it.
 
 `davidau-qwen38-27-turbo-6k.bat` runs a DavidAU remix of the same Qwen3.8-27B —
 `Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf`
@@ -154,12 +160,11 @@ and prompt cache:
   exact geometry of Qwen3.8-27B (`d 5120`, `n_head 24`, `n_head_kv 4`, `n_ff 17408`,
   `full_attention_interval 4`, native context 262144) — `--spec-type draft-mtp`
   applies unchanged;
-- it passes `qwen-general.jinja`, like every script (see below); that
-  template accepts only `xhigh` (its default) / `medium` / `low` for
-  `--reasoning-effort` and raises on anything else — note there is **no** `high`.
-  `medium` injects no instruction at all; `xhigh` prepends “think carefully …
-  prioritize correctness” to the system block, which is why the coding config uses
-  it;
+- it passes `qwen-general.jinja`, like every script (see below); that template
+  hard-codes the effort level, prepending “think carefully … prioritize
+  correctness” to the system block — which is what this coding config wants
+  anyway. `--reasoning-effort xhigh` is still passed, but only as documentation:
+  the template ignores it;
 - the weights are 22 920 MiB — ~1 530 MiB heavier than lmstudio's Q6_K (21 392 MiB),
   so it runs at `-c 262144 -ts 12,11,7 -b 2048 -ub 256`: `12,11,7` + `-ub 256` is
   the geometry measured fastest on this bench (32.2 vs 30.1 t/s for
@@ -195,7 +200,7 @@ and prompt cache:
 `davidau-qwen38-27-turbo-4k_m.bat` is the same model at the Q4_K_M file
 (`…-MTP-Q4_K_M.gguf`), pulled back onto **two** cards: `-ts 17,13 -c 262144` with
 `-b 2048 -ub 128`. It runs the same code profile as the three-card script
-(`--temp 0.6`, `xhigh`, penalties spelled out) and the same
+(`--temp 0.6`, penalties spelled out) and the same
 `qwen-general.jinja`. It has **not** been measured yet — `-ub 128` halves the
 compute buffer relative to `-ub 256`, which is presumably the headroom the
 heavier Q4_K_M weights need, but that is inference, not a logged run.
@@ -243,11 +248,12 @@ config here and the only one with room to spare:
 - measured generation on a code prompt: **44.6 t/s** with MTP accepting 78.5 % of
   drafts. Thinking is on and unlimited, so a short `max_tokens` is consumed
   entirely by `reasoning_content` — budget accordingly when testing;
-- `--reasoning-effort xhigh` **is** the maximum, not a middle setting. The flag
-  itself accepts `minimal/low/medium/high/xhigh/max`, but
-  `qwen-general.jinja` allows only `('xhigh', 'medium', 'low')` and raises on
-  anything else, so `high` and `max` produce a template error rather than deeper
-  thinking. `--reasoning-budget -1` is the unrestricted default, spelled out;
+- `--reasoning-effort xhigh` is spelled out as every other script spells it out,
+  but it does nothing: `qwen-general.jinja` hard-codes the level, so this flag and
+  any client-supplied `reasoning_effort` are both ignored — `high` and `max` no
+  longer produce a template error either, they simply change nothing.
+  `--reasoning-budget -1` (a different flag — the token budget for thinking) is
+  the unrestricted default, spelled out;
 - the GSQ-RCO model's own sampling defaults are baked into the GGUF as
   `temp 1.0 / top-k 20 / top-p 0.95 / min-p 0.0`; the script overrides `temp` to
   `0.6` for the repo's code profile (the model card recommends no sampling values
@@ -302,27 +308,36 @@ What it contains:
   `<think>…</think>`, the reasoning is lifted into the `<think>` block instead of
   being wrapped in a second empty one. This is the other rendering change, and it
   fixes a real double-`<think>` bug the turbo/gsq-rco and `qwen38-27` files had;
-- **`reasoning_effort`**: `xhigh` (default) / `medium` / `low`, anything else is a
-  `raise_exception`. So `--reasoning-effort high` and `max`, which the server-side
-  flag accepts, produce a template error — there is **no** `high`. `medium`
-  injects no instruction at all; `xhigh` prepends “think carefully … prioritize
-  correctness” to the system block, which is why the coding configs use it. The
-  block is gated on `enable_thinking`;
+- **a hard-coded effort level**. The template does **not** read
+  `reasoning_effort`: it always prepends the `xhigh` instruction (“think
+  carefully … prioritize correctness”) to the system block. Every script still
+  passes `--reasoning-effort xhigh`, so the configs state their intent in a line
+  you can read, but the enforcement lives here — the flag's value never reaches
+  the prompt. The reason for that split: the server merges the CLI flag and the
+  request body's `reasoning_effort` into one template variable, so a client (a
+  chat UI's effort selector, an agent's default) could silently change the prompt
+  — or kill the request, since the flag accepts `minimal/low/medium/high/xhigh/max`
+  while the old block knew only `xhigh/medium/low` and raised on the rest, and an
+  agent sending `reasoning_effort: "high"` got a 500. The only remaining lever is
+  `enable_thinking` (`--reasoning on|off|auto`, or
+  `chat_template_kwargs` in the request), which still gates the instruction off
+  entirely;
 - `render_content` with image/video branches (and a `raise_exception` if either
   appears in a system message), though every script runs `--no-mmproj`.
 
 Caveats that survive the merge:
 
-- `unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat` have **no `--jinja`**, so
-  `--chat-template-file` does nothing there and the GGUF's built-in template is
-  used. They point at `qwen-general.jinja` only so no script references a deleted
-  file. Adding `--jinja` to them is a separate decision — it would change their
-  rendered prompt;
-- on the Ornith models `--reasoning-effort` works *only* because of this
-  template's `reasoning_effort` block. The model itself has no effort tiers (the
-  card says thinking is simply on by default), so this is a prompt-level
-  instruction, not a runtime dial. `ornith-ornith15-35-8k.bat` passes `medium`,
-  i.e. no injected instruction;
+- `unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat` do not spell out `--jinja`, but it
+  is on by default in this build, so they render through `qwen-general.jinja`
+  like every other script — measured, not assumed. Their GGUF carries a stock
+  Qwen3.8 template of its own (which, unlike ours, maps `high` → `xhigh` and
+  still raises on `max`/`minimal`), but it is not what gets used;
+- the effort instruction is a prompt-level string, not a runtime dial: none of
+  these models has effort tiers (the Ornith card says thinking is simply on by
+  default). `ornith-ornith15-35-8k.bat`, `qwen-qwen38-27-6k.bat` and
+  `unsloth-qwen38-27-6km-test.bat` used to pass `--reasoning-effort medium`, which
+  injected nothing at all — their flag now reads `xhigh` like everywhere else and
+  they get the instruction. That is the one prompt change the hard-coding caused;
 - `agentworld-35.jinja` was deliberately left out of the merge: no script
   references it, and it is an unpatched older base (no `reasoning_effort`, only
   `messages[0]` as system) for a different family — it has an audio branch
