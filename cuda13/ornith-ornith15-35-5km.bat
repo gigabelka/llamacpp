@@ -1,5 +1,5 @@
 @echo off
-title LLaMA Server - Ornith 1.5 35B A3B Q6_K (Coding, 2x16GB)
+title LLaMA Server - Ornith 1.5 35B A3B Q5_K_M (Coding, 2x16GB)
 set CUDA_DEVICE_ORDER=PCI_BUS_ID
 set CUDA_VISIBLE_DEVICES=0,1
 
