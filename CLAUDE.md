@@ -39,6 +39,7 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | `unsloth-qwen38-27-6km.bat`      | unsloth UD-Q6_K_M                       | 0,1   | 65336  | 17,13    | f16 / f16     | 1024 / 256 |
 | `unsloth-qwen38-27-6km-test.bat` | unsloth UD-Q6_K_M                       | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 | `ornith-ornith15-35-8k.bat`      | ornith-ai Ornith-1.5-35B Q8_0           | 0,1,2 | 262144 | 14,13,13 | q8_0 / q8_0   | 2048 / 256 |
+| `ornith-ornith15-35-6k.bat`      | ornith-ai Ornith-1.5-35B Q6_K           | 0,1   | 98304  | 14,13    | q8_0 / q4_0   | 2048 / 256 |
 | `davidau-qwen38-27-turbo-6k.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 
 Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
@@ -61,6 +62,10 @@ when copying one to make another:
   `--reasoning-effort xhigh`, with `--repeat-penalty 1.0 --presence-penalty 0.0
   --frequency-penalty 0.0` spelled out because the author insists penalties stay
   off on MTP builds. Do not “normalise” it back to `--temp 1.0 / medium`.
+  `ornith-ornith15-35-6k.bat` is tuned for code the same way and deviates too:
+  `--temp 0.6` and `--reasoning-effort xhigh`. Unlike the Qwen scripts, its
+  effort flag only does something because `ornith15-35.jinja` now carries the
+  same `xhigh`/`medium`/`low` block — see “Chat templates”.
 - **older unsloth profile** (`unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat`):
   low temperature (0.15–0.6), `--min-p 0.05`, DRY penalties
   (`--dry-multiplier`, `--dry-base 1.75`, `--dry-allowed-length`,
@@ -98,6 +103,35 @@ arch `qwen35moe`:
   MiB of 16311, nothing on CPU, ~84 t/s generation with MTP accepting ~78 % of
   drafts. CUDA1 is the tightest card — shift to `14,12,14` if it ever OOMs.
   `--cache-reuse 256` is accepted but logged as unsupported for this context type.
+
+`ornith-ornith15-35-6k.bat` is the same model at `Ornith-1.5-35B-Q6_K.gguf`
+(29.2 GB on disk = 27.2 GiB) on **two** cards, tuned for code. The two Q6_K/Q8_0
+files are the only Ornith GGUFs downloaded — Q5_K_M/Q4_K_M are not in the folder.
+It cannot run the native `-c 262144`: parsing the Q6_K header gives 27 447 MiB of
+GPU-resident weights (`token_embd` is CPU-mapped and costs nothing in VRAM, but
+`output.weight` is untied and adds 398 MiB to the last card), leaving only ~2.0
+GiB of the two cards' ~32.1 GiB for KV + compute + MTP draft. At `-c 262144` the
+budget model — calibrated against the three-card Q8_0 measurement above and
+accurate to ~270 MiB — puts CUDA1 at ~1142 MiB over. Hence:
+
+- `-c 98304` with `-ctv q4_0`: ≥500 MiB free on each card against the real
+  16 050 MiB base. `q8_0/q4_0` KV is 8320 B/token vs 10 880 for `q8_0/q8_0`;
+- `-ts 14,13`, copying the first two fields of the three-card script. The split
+  lands the boundary after `blk.20` → 21 blocks on CUDA0, 20 on CUDA1; an even
+  `13,13` would give only 20 on CUDA0 and push another ~660 MiB block onto CUDA1,
+  which already carries `blk.40` (the MTP head), `output.weight` and the whole
+  draft KV + compute buffer, so it is always the tight card. Blocks cannot be
+  split, so `14,13` is the smallest imbalance reachable;
+- `-ctk` stays `q8_0` — the f16 K-cache has no CUDA kernel (see the three-card
+  note above); `-ctv q4_0` is the cheap lever instead;
+- if it OOMs: `-ot "output.weight=CUDA0"` (moves 398 MiB off the tight card)
+  → `-c` ↓ 81920 → 65536 → `-ctk q4_0` → `-ub 128` → `-ngl` last;
+- the only routes to a full 262144 on two cards are `Ornith-1.5-35B-Q5_K_M.gguf`
+  (25.3 GB, needs downloading — budget says it fits with ~700–1000 MiB to spare)
+  or a third card;
+- code profile: `--temp 0.6` (the card lists 0.6 for general work and 1.0 only
+  for benchmark reproduction) and `--reasoning-effort xhigh`. This script is the
+  reason `ornith15-35.jinja` gained `reasoning_effort` support at all.
 
 `davidau-qwen38-27-turbo-6k.bat` runs a DavidAU remix of the same Qwen3.8-27B —
 `Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf`
@@ -157,7 +191,7 @@ is the only script with `-ot "token_embd.weight=CUDA0"` and a deliberately skewe
 | ----------------------- | ------------------------------------------------ |
 | `qwen38-27.jinja`       | all `qwen-*` and `unsloth-*` scripts             |
 | `qwen38-27-turbo.jinja` | `davidau-qwen38-27-turbo-6k.bat`                 |
-| `ornith15-35.jinja`     | `ornith-ornith15-35-8k.bat`                      |
+| `ornith15-35.jinja`     | both `ornith-ornith15-35-*.bat` scripts          |
 | `agentworld-35.jinja`   | nothing — no launch script references it (yet)   |
 
 `qwen38-27.jinja` is a **patched** Qwen3.8 template; `qwen38-27-turbo.jinja` is
@@ -181,6 +215,19 @@ given; and turbo picks the last user turn by skipping `<tool_response>`-shaped
 ones, where `qwen38-27.jinja` just takes the last `user` message. The
 `xhigh`/`medium`/`low` set and the three instruction strings are identical in
 both.
+
+`ornith15-35.jinja` has since been given the same `reasoning_effort` block,
+copied verbatim from `qwen38-27-turbo.jinja`: default `xhigh`, the same validation
+`raise_exception` (so `high` is **not** a valid value anywhere), the same xhigh
+and low instruction strings, and `medium` injecting nothing. Before this it
+ignored the variable entirely, which made `--reasoning-effort` a silent no-op on
+both Ornith scripts. Consequences worth knowing:
+
+- the model itself has no effort tiers — the card says thinking is simply on by
+  default — so this is a prompt-level instruction, not a runtime dial;
+- `ornith-ornith15-35-8k.bat` still passes `medium`, so its rendered prompt is
+  unchanged; switching it to `xhigh` is a one-line edit if wanted;
+- the block is gated on `enable_thinking` exactly as in the Qwen templates.
 
 Agent clients that send a `developer` role or several system messages need the
 patched variant — which now means both Qwen3.8 templates. Note that the git index still holds the Ornith template as

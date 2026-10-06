@@ -55,8 +55,23 @@
         {%- set num_sys = 1 %}
     {%- endif %}
 {%- endif %}
+{%- set reasoning_instructions = '' %}
+{%- if enable_thinking is undefined or enable_thinking is true %}
+    {%- set resolved_reasoning_effort = reasoning_effort|default('xhigh') %}
+    {%- if resolved_reasoning_effort not in ('xhigh', 'medium', 'low') %}
+        {{- raise_exception('Unexpected reasoning effort ' ~ reasoning_effort ~ '. Supported types are xhigh (default), medium, and low.') }}
+    {%- endif %}
+    {%- if resolved_reasoning_effort == 'xhigh' %}
+        {%- set reasoning_instructions = 'Reasoning effort is set to xhigh. Please think carefully through the task, validate key assumptions, consider plausible alternatives, and prioritize correctness, consistency, and clarity in the final answer.' %}
+    {%- elif resolved_reasoning_effort == 'low' %}
+        {%- set reasoning_instructions = 'Reasoning effort is set to low. Keep your thinking brief and focused, moving directly to the conclusion without unnecessary elaboration.' %}
+    {%- endif %}
+{%- endif %}
 {%- if tools and tools is iterable and tools is not mapping %}
     {{- '<|im_start|>system\n' }}
+    {%- if reasoning_instructions %}
+        {{- reasoning_instructions + '\n\n' }}
+    {%- endif %}
     {{- "# Tools\n\nYou have access to the following functions:\n\n<tools>" }}
     {%- for tool in tools %}
         {{- "\n" }}
@@ -70,7 +85,9 @@
     {{- '<|im_end|>\n' }}
 {%- else %}
     {%- if merged_system %}
-        {{- '<|im_start|>system\n' + merged_system + '<|im_end|>\n' }}
+        {{- '<|im_start|>system\n' + (reasoning_instructions + '\n\n' if reasoning_instructions else '') + merged_system + '<|im_end|>\n' }}
+    {%- elif reasoning_instructions %}
+        {{- '<|im_start|>system\n' + reasoning_instructions + '<|im_end|>\n' }}
     {%- endif %}
 {%- endif %}
 {%- set ns = namespace(multi_step_tool=true, last_query_index=messages|length - 1) %}
