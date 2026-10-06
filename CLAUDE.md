@@ -239,15 +239,41 @@ config here and the only one with room to spare:
   weights: CUDA1 is always the tight card because the MTP draft KV (1024 MiB,
   **f16**, 1 layer), the draft compute buffer (+613 MiB) and `output.weight`
   (682 MiB) all land on it, and `-ts 16,14` is known to OOM on this family;
-- that ~3 GiB of slack is deliberately **not** spent on a bigger `-ub` or a finer
-  KV quant. `-ub 256` is the fastest point measured on this bench in the §6
-  calibration (`-ub` has not been re-measured for IQ3_S) and `f16` KV would need
-  +7680 MiB; `q8_0/q8_0` is already the near-lossless point. If prefill speed
-  ever matters more than margin, `-ub 384` then `-ub 512` are the levers — the
-  latter leaves only ~870 MiB on CUDA1;
-- measured generation on a code prompt: **44.6 t/s** with MTP accepting 78.5 % of
-  drafts. Thinking is on and unlimited, so a short `max_tokens` is consumed
+- that ~3 GiB of slack is **not** spent. Spending it on a bigger `-ub`, on
+  deeper MTP speculation, or on a coarser draft KV was tried by measurement on
+  2026-10-06 and reverted — each change is either free of benefit or actively
+  worse, see the numbers below. Free VRAM is not scarce on this config;
+- **measured 2026-10-06** (cards free, `--verbose`, one ~2 885-token code prompt,
+  several repeats per setting):
+  - `-ub 384` instead of 256 buys **nothing** on prefill: 1 091–1 095 t/s versus
+    1 083–1 089 t/s (+0.7 %, two bands that barely separate) while costing
+    +308 MiB of main compute buffer on CUDA0 and +286 on CUDA1. Reverted;
+  - `--spec-draft-n-max 3` instead of 2 **lowers** MTP acceptance from ~76 % to
+    ~71 % (five samples each, both at `-ub 256`) with generation inside the noise
+    band (means 37.6 vs 38.0 t/s). It also costs +1 004 MiB of draft compute
+    buffer (613.03 → 1 617.09 MiB) **and** +150 MiB of RS, because `rs_seq` tracks
+    `n-max + 1` (RS 448.88 → 598.50 MiB). Reverted;
+  - `-ctkd q8_0 -ctvd q8_0` **does work as intended** — the draft KV drops from
+    1 024.00 MiB (K/V `f16`, 512 each) to 544.00 MiB (K/V `q8_0`, 272 each),
+    against the main context's `q8_0/q8_0` pair whose kernel is known to exist.
+    It is **not** applied: its only purpose was to fund the two changes above.
+    Keep it in reserve if margin is ever actually needed;
+- prefill here is highly reproducible once warm: the first request after load
+  reads ~15 % low and must be discarded, after which six repeats spread less than
+  1 % and land at **~1 085 t/s** on `-ub 256`. (The `~595 t/s` quoted elsewhere in
+  the docs belongs to the heavier DavidAU Q6_K three-card config, not this one);
+- generation on that prompt ranges **35–42 t/s** run to run for *identical*
+  settings — the spread is stochastic draft acceptance at `temp 0.6`, not the
+  config. Never read a single generation sample as an A/B; the earlier
+  "44.6 t/s / 78.5 %" figure came from a different code prompt and predates this
+  work. Thinking is on and unlimited, so a short `max_tokens` is consumed
   entirely by `reasoning_content` — budget accordingly when testing;
+- when measuring, the cards must be **free**: this build has `-fit/--fit` **on by
+  default** ("adjust unset arguments to fit in device memory", target 1024
+  MiB/device), so a run on cards that are merely *idle* rather than *empty* —
+  LM Studio holds ~15 GiB per card without using it — can silently down-adjust
+  unset arguments instead of failing loudly, and the numbers would then describe
+  a different config than the script names;
 - `--reasoning-effort xhigh` is spelled out as every other script spells it out,
   but it does nothing: `qwen-general.jinja` hard-codes the level, so this flag and
   any client-supplied `reasoning_effort` are both ignored — `high` and `max` no
@@ -261,8 +287,9 @@ config here and the only one with room to spare:
 - vision is off (`--no-mmproj`) even though `mmproj-Qwen3.8-27B-BF16.gguf`
   (931 MB) sits next to the model — add `--mmproj` to enable it, the ~910 MiB
   still fits in the slack;
-- if it ever OOMs: `-ub 128` → `-ctv q4_0` → `-ot "output.weight=CUDA0"` →
-  `-c 229376` → `-ngl` last.
+- if it ever OOMs: `-ctkd q8_0 -ctvd q8_0` first (measured lever, −480 MiB on the
+  tight card, see above) → `-ub 128` → `-ctv q4_0` →
+  `-ot "output.weight=CUDA0"` → `-c 229376` → `-ngl` last.
 
 ## Chat templates
 
