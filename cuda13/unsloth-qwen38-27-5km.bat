@@ -38,7 +38,5 @@ cd /d "%~dp0.."
   --dry-multiplier 0.8 ^
   --dry-base 1.75 ^
   --dry-allowed-length 2 ^
-  --dry-penalty-last-n 4096 ^
-  --log-file "c:\Llamacpp\cuda13\llama-server.log"
-
+  --dry-penalty-last-n 4096
 pause

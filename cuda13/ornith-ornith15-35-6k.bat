@@ -34,6 +34,5 @@ cd /d "%~dp0.."
   --temp 0.6 ^
   --top-k 20 ^
   --top-p 0.95 ^
-  --min-p 0.0 ^
-  --log-file "c:\Llamacpp\cuda13\llama-server.log"
+  --min-p 0.0
 pause

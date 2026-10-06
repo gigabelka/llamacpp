@@ -38,6 +38,5 @@ cd /d "%~dp0.."
   --min-p 0.0 ^
   --repeat-penalty 1.0 ^
   --presence-penalty 0.0 ^
-  --frequency-penalty 0.0 ^
-  --log-file "c:\Llamacpp\cuda13\llama-server.log"
+  --frequency-penalty 0.0
 pause
