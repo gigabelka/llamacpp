@@ -54,9 +54,13 @@
 {%- endfor %}
 {%- set num_sys = sysns.count %}
 {%- set merged_system = sysns.text %}
-{#- reasoning_effort is deliberately NOT read here: the level is fixed in the    #}
-{#- launch script, and a client-supplied reasoning_effort (a standard OpenAI     #}
-{#- field) must neither change the prompt nor raise. xhigh is the only level.    #}
+{#- reasoning_effort is deliberately NOT read here. The level is fixed in this   #}
+{#- file, in the string below, and nowhere else: the launch scripts no longer    #}
+{#- pass --reasoning-effort at all (removed 2026-10-07 as a no-op). The server   #}
+{#- merges that CLI flag and a request body's reasoning_effort into one template #}
+{#- variable, so this template cannot tell a config from a client and must       #}
+{#- ignore both -- a client-supplied level may neither change the prompt nor     #}
+{#- raise. xhigh is the only level. enable_thinking is the one real lever.       #}
 {%- set reasoning_instructions = '' %}
 {%- if enable_thinking is undefined or enable_thinking is true %}
     {%- set reasoning_instructions = 'Reasoning effort is set to xhigh. Think the task through before answering: state the key assumptions and validate them, and weigh plausible alternatives instead of committing to the first one. When code is involved, trace execution step by step with concrete values rather than by intuition; derive types and signatures from the code actually given instead of guessing them; when a change touches more than one file, enumerate every call site and definition it affects; and enumerate edge cases explicitly, including empty input, a single element, boundary and overflow values, negative numbers, null or missing values, and concurrent access. Before answering, re-read your own conclusion and check it against the source for contradictions. Prioritize correctness, consistency, and clarity in the final answer.' %}

@@ -39,9 +39,9 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | `unsloth-qwen38-27-4km.bat`        | unsloth UD-Q4_K_M                         | 0,1   | 180224 | 17,13    | f16 / f16     | 1024 / 256 |
 | `unsloth-qwen38-27-5km.bat`        | unsloth UD-Q5_K_M                         | 0,1   | 262144 | 16,14    | q8_0 / q4_0   | 1024 / 256 |
 | `unsloth-qwen38-27-6km.bat`        | unsloth UD-Q6_K_M                         | 0,1   | 65336  | 17,13    | f16 / f16     | 1024 / 256 |
-| `unsloth-qwen38-27-6km-test.bat`   | unsloth UD-Q6_K_M                         | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 | `ornith-ornith15-35-8k.bat`        | ornith-ai Ornith-1.5-35B Q8_0             | 0,1,2 | 262144 | 14,13,13 | q8_0 / q8_0   | 2048 / 256 |
 | `ornith-ornith15-35-6k.bat`        | ornith-ai Ornith-1.5-35B Q6_K             | 0,1   | 98304  | 14,13    | q8_0 / q4_0   | 2048 / 256 |
+| `ornith-ornith15-35-5km.bat`       | ornith-ai Ornith-1.5-35B Q5_K_M           | 0,1   | 262144 | 14,13    | q8_0 / q8_0   | 2048 / 256 |
 | `davidau-qwen38-27-turbo-6k.bat`   | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K   | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 | `davidau-qwen38-27-turbo-4k_m.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q4_K_M | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 2048 / 128 |
 
@@ -56,14 +56,16 @@ Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
 The scripts fall into two groups, and this is the main thing to keep straight
 when copying one to make another:
 
-- **current profile** (`qwen-*`, `*-6km-test`, `ornith-*`):
+- **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ornith-*`):
   `--jinja` + `--chat-template-file`, model-author sampling defaults
   (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties
   (the one exception is `_no_res`, see below),
-  `--spec-draft-n-max 2–3`. Every script except
-  `qwen-qwen38-27-4km_no_res.bat` passes `--reasoning-effort xhigh`, but that flag
-  is a declaration of intent only — the level is hard-coded in `qwen-general.jinja`
-  and cannot be changed from outside, see “Chat templates”. The `_no_res` variant
+  `--spec-draft-n-max 2–3`. **No script passes `--reasoning-effort` any more**:
+  the flag was a complete no-op (the template never read it) and was removed from
+  all twelve scripts that carried it on 2026-10-07. Do not re-add it as
+  documentation — the effort level is stated once, in the preamble text inside
+  `qwen-general.jinja`, and cannot be changed from outside, see “Chat templates”.
+  The `_no_res` variant
   is the one script that turns thinking off instead: it passes `--reasoning off`,
   and the template then drops the effort instruction and closes the think block
   (`<think>\n\n</think>\n\n`) so the model answers immediately.
@@ -140,8 +142,9 @@ arch `qwen35moe`:
   `--cache-reuse 256` is accepted but logged as unsupported for this context type.
 
 `ornith-ornith15-35-6k.bat` is the same model at `Ornith-1.5-35B-Q6_K.gguf`
-(29.2 GB on disk = 27.2 GiB) on **two** cards, tuned for code. The two Q6_K/Q8_0
-files are the only Ornith GGUFs downloaded — Q5_K_M/Q4_K_M are not in the folder.
+(29.2 GB on disk = 27.2 GiB) on **two** cards, tuned for code. Three Ornith GGUFs
+are now in the folder — Q5_K_M (25.3 GB, downloaded 2026-10-06), Q6_K and Q8_0;
+Q4_K_M is not.
 It cannot run the native `-c 262144`: parsing the Q6_K header gives 27 447 MiB of
 GPU-resident weights (`token_embd` is CPU-mapped and costs nothing in VRAM, but
 `output.weight` is untied and adds 398 MiB to the last card), leaving only ~2.0
@@ -162,13 +165,13 @@ accurate to ~270 MiB — puts CUDA1 at ~1142 MiB over. Hence:
 - if it OOMs: `-ot "output.weight=CUDA0"` (moves 398 MiB off the tight card)
   → `-c` ↓ 81920 → 65536 → `-ctk q4_0` → `-ub 128` → `-ngl` last;
 - the only routes to a full 262144 on two cards are `Ornith-1.5-35B-Q5_K_M.gguf`
-  (25.3 GB, needs downloading — budget says it fits with ~700–1000 MiB to spare)
-  or a third card;
+  (the budget said it fits with ~700–1000 MiB to spare; it has since been
+  downloaded and `ornith-ornith15-35-5km.bat` runs exactly that — `-c 262144
+  -ts 14,13` at `q8_0/q8_0`, unmeasured) or a third card;
 - code profile: `--temp 0.6` (the card lists 0.6 for general work and 1.0 only
-  for benchmark reproduction) and `--reasoning-effort xhigh`. This script was
-  historically the reason the Ornith template gained a `reasoning_effort` block at
-  all; the level is now hard-coded in `qwen-general.jinja`, so the flag documents
-  the intent while the template enforces it.
+  for benchmark reproduction). This script was historically the reason the Ornith
+  template gained a `reasoning_effort` block at all; nothing is left of that — the
+  level is hard-coded in `qwen-general.jinja` and the script passes no effort flag.
 
 `davidau-qwen38-27-turbo-6k.bat` runs a DavidAU remix of the same Qwen3.8-27B —
 `Qwen3.8-27B-TurboFCFusion-735-882-Here-Uncen-NEO-CODER-MAX-MTP-Q6_K.gguf`
@@ -184,8 +187,8 @@ and prompt cache:
 - it passes `qwen-general.jinja`, like every script (see below); that template
   hard-codes the effort level, prepending the `xhigh` coding instruction
   (see “Chat templates”) to the system block — which is what this coding config
-  wants anyway. `--reasoning-effort xhigh` is still passed, but only as documentation:
-  the template ignores it;
+  wants anyway. The script passes no effort flag; there is no way to pass one that
+  would do anything;
 - the weights are 22 920 MiB — ~1 530 MiB heavier than lmstudio's Q6_K (21 392 MiB),
   so it runs at `-c 262144 -ts 12,11,7 -b 2048 -ub 256`: `12,11,7` + `-ub 256` is
   the geometry measured fastest on this bench (32.2 vs 30.1 t/s for
@@ -227,9 +230,11 @@ and prompt cache:
 compute buffer relative to `-ub 256`, which is presumably the headroom the
 heavier Q4_K_M weights need, but that is inference, not a logged run.
 
-`unsloth-qwen38-27-6km-test.bat` is the three-card experiment for UD-Q6_K_M: it
-is the only script with `-ot "token_embd.weight=CUDA0"` and a deliberately skewed
-`-ts 12,11,7` (GPU2 sits on a Gen4 x4 link, so layers are moved off it).
+`unsloth-qwen38-27-6km-test.bat` — a three-card experiment for UD-Q6_K_M, the only
+script with `-ot "token_embd.weight=CUDA0"` and a skewed `-ts 12,11,7` — **no longer
+exists in `cuda13/`**; it was deleted at some point and the docs kept describing it.
+The reason for that skew still holds everywhere else: GPU2 sits on a Gen4 x4 link,
+so layers are moved off it.
 
 `daslab-qwen38-27-iq3_s.bat` runs `Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf`
 (`c:\Users\viktor\.lmstudio\models\ISTA-DASLab\Qwen3.8-27B-GSQ-RCO-GGUF\`) — an
@@ -296,12 +301,11 @@ config here and the only one with room to spare:
   LM Studio holds ~15 GiB per card without using it — can silently down-adjust
   unset arguments instead of failing loudly, and the numbers would then describe
   a different config than the script names;
-- `--reasoning-effort xhigh` is spelled out as every other script spells it out,
-  but it does nothing: `qwen-general.jinja` hard-codes the level, so this flag and
-  any client-supplied `reasoning_effort` are both ignored — `high` and `max` no
-  longer produce a template error either, they simply change nothing.
-  `--reasoning-budget -1` (a different flag — the token budget for thinking) is
-  the unrestricted default, spelled out;
+- a client-supplied `reasoning_effort` is ignored: `qwen-general.jinja` hard-codes
+  the level, and `high` or `max` no longer produce a template error either, they
+  simply change nothing. `--reasoning-budget -1` (a different flag — the token
+  budget for thinking, **not** a no-op) is the unrestricted default, spelled out
+  here and in `qwen-qwen38-27-4km_xhigh.bat`;
 - the GSQ-RCO model's own sampling defaults are baked into the GGUF as
   `temp 1.0 / top-k 20 / top-p 0.95 / min-p 0.0`; the script overrides `temp` to
   `0.6` for the repo's code profile (the model card recommends no sampling values
@@ -369,10 +373,12 @@ What it contains:
   `qwen-qwen38-27-4km_xhigh.bat`, but it is in the shared template, so it reaches
   all thirteen scripts — including `ornith-*` and the unsloth ones. Keep it short:
   it sits at position 0 of the prompt, so editing it invalidates every `-cram`
-  prompt-cache prefix and the next run of each script re-prefills. Every script still
-  passes `--reasoning-effort xhigh`, so the configs state their intent in a line
-  you can read, but the enforcement lives here — the flag's value never reaches
-  the prompt. The reason for that split: the server merges the CLI flag and the
+  prompt-cache prefix and the next run of each script re-prefills. **This is the
+  only place the level is stated.** The scripts used to spell out
+  `--reasoning-effort xhigh` as a readable declaration of intent; that line was
+  removed from all twelve of them on 2026-10-07, because a flag whose value never
+  reaches the prompt is a lie in the config rather than documentation. Do not
+  re-add it. The reason the template ignores the variable: the server merges the CLI flag and the
   request body's `reasoning_effort` into one template variable, so a client (a
   chat UI's effort selector, an agent's default) could silently change the prompt
   — or kill the request, since the flag accepts `minimal/low/medium/high/xhigh/max`
@@ -396,10 +402,11 @@ Caveats that survive the merge:
   still raises on `max`/`minimal`), but it is not what gets used;
 - the effort instruction is a prompt-level string, not a runtime dial: none of
   these models has effort tiers (the Ornith card says thinking is simply on by
-  default). `ornith-ornith15-35-8k.bat`, `qwen-qwen38-27-6k.bat` and
-  `unsloth-qwen38-27-6km-test.bat` used to pass `--reasoning-effort medium`, which
-  injected nothing at all — their flag now reads `xhigh` like everywhere else and
-  they get the instruction. That is the one prompt change the hard-coding caused;
+  default). `ornith-ornith15-35-8k.bat` and `qwen-qwen38-27-6k.bat` once passed
+  `--reasoning-effort medium`, which injected nothing at all; hard-coding the level
+  gave them the `xhigh` instruction, and that is the one prompt change the merge
+  caused. The flag itself is gone from every script now, so the whole question is
+  historical;
 - `agentworld-35.jinja` was deliberately left out of the merge: no script
   references it, and it is an unpatched older base (no `reasoning_effort`, only
   `messages[0]` as system) for a different family — it has an audio branch

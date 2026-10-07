@@ -25,7 +25,6 @@ cd /d "%~dp0.."
   -cram 24576 ^
   --jinja ^
   --chat-template-file ".\qwen-general.jinja" ^
-  --reasoning-effort xhigh ^
   --spec-type draft-mtp ^
   --spec-draft-n-max 3 ^
   --spec-draft-p-min 0.5 ^

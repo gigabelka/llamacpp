@@ -24,7 +24,6 @@ cd /d "%~dp0.."
   --no-mmproj ^
   --cache-reuse 256 ^
   --chat-template-file ".\qwen-general.jinja" ^
-  --reasoning-effort xhigh ^
   --spec-type draft-mtp ^
   --spec-draft-n-max 4 ^
   --spec-draft-p-min 0.6 ^
