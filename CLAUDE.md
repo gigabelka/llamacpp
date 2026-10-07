@@ -32,8 +32,8 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | script                             | model (GGUF)                              | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
 | ---------------------------------- | ----------------------------------------- | ----- | ------ | -------- | ------------- | ---------- |
 | `daslab-qwen38-27-iq3_s.bat`       | ISTA-DASLab GSQ-RCO IQ3_S (MTP)           | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
-| `qwen-qwen38-27-4km_xhigh.bat`     | lmstudio-community Q4_K_M (thinking)      | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
-| `qwen-qwen38-27-4km_no_res.bat`    | lmstudio-community Q4_K_M (no reasoning)  | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-4km_xhigh.bat`     | lmstudio-community Q4_K_M (thinking, main code config) | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-4km_no_res.bat`    | lmstudio-community Q4_K_M (no reasoning, instruct samplers) | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
 | `qwen-qwen38-27-6k.bat`            | lmstudio-community Q6_K                   | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
 | `unsloth-qwen38-27-3kxl.bat`       | unsloth UD-Q3_K_XL                        | 0,1   | 229376 | 17,13    | f16 / f16     | 1024 / 256 |
 | `unsloth-qwen38-27-4km.bat`        | unsloth UD-Q4_K_M                         | 0,1   | 180224 | 17,13    | f16 / f16     | 1024 / 256 |
@@ -58,7 +58,8 @@ when copying one to make another:
 
 - **current profile** (`qwen-*`, `*-6km-test`, `ornith-*`):
   `--jinja` + `--chat-template-file`, model-author sampling defaults
-  (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties,
+  (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties
+  (the one exception is `_no_res`, see below),
   `--spec-draft-n-max 2–3`. Every script except
   `qwen-qwen38-27-4km_no_res.bat` passes `--reasoning-effort xhigh`, but that flag
   is a declaration of intent only — the level is hard-coded in `qwen-general.jinja`
@@ -72,18 +73,30 @@ when copying one to make another:
   out because the author insists penalties stay off on MTP builds. Do not
   “normalise” it back to `--temp 1.0`.
   `ornith-ornith15-35-6k.bat` is tuned for code the same way and deviates too:
-  `--temp 0.6`. `qwen-qwen38-27-4km_xhigh.bat` is the same code tuning on the
-  two-card Q4_K_M: `--temp 0.6`, plus `--reasoning-budget -1` spelled out (“think
-  without a limit” — already the default) and `-cram 24576` in place of the no-op
-  `--cache-reuse 256`. `qwen-qwen38-27-4km_no_res.bat` is that same config with
-  thinking disabled — instead of the two reasoning lines it passes a single
-  `--reasoning off`, and everything else (samplers, `-cram 24576`, VRAM knobs) is
-  identical, so it is the same `CALCULATE.md` §6 budget point. The official
-  Qwen3.8-27B card gives
-  `1.0` for thinking mode, so the `0.6` here is this repo's code profile rather
-  than the card's recommendation — deliberate, do not “normalise” it away. Its
-  VRAM knobs are untouched: `-c 262144 -ts 17,13` at `q8_0/q8_0` is the measured
-  §6 point in `CALCULATE.md`.
+  `--temp 0.6`.
+  `qwen-qwen38-27-4km_xhigh.bat` is **the main config for hard coding work**
+  (algorithms, debugging, state tracing, multi-file refactoring, type inference,
+  edge cases), and it is the one script running the card's *thinking-mode*
+  samplers instead of this repo's `0.6` code profile:
+  `--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`. It sat at `0.6` until
+  2026-10-07 and was moved on purpose — the official Qwen3.8-27B card gives `1.0`
+  for thinking mode and warns that lowering the temperature *in that mode* sends
+  the model into loops inside `<think>`, which is exactly the failure this config
+  must not have. Do not “normalise” it back to `0.6`. That change is scoped to
+  this script: `davidau-*` and `ornith-ornith15-35-6k.bat` keep their `0.6`. It
+  also spells out `--reasoning-budget -1` (“think without a limit” — already the
+  default) and uses `-cram 24576` in place of the no-op `--cache-reuse 256`.
+  `qwen-qwen38-27-4km_no_res.bat` is the same model with thinking off — the fast
+  lane for mechanical work (bulk renames, tool-call loops), not a cheaper stand-in
+  for the config above. Instead of the two reasoning lines it passes a single
+  `--reasoning off`, and because that puts the model in a different operating mode
+  it carries the card's **instruct** samplers rather than the thinking ones:
+  `--temp 0.7 --top-p 0.80 --top-k 20 --min-p 0.0 --presence-penalty 0.5`. The
+  card gives `presence_penalty 1.5` there; `0.5` is this repo's compromise,
+  because 1.5 starts suppressing repeated identifiers and keywords in code — push
+  it towards 1.5 only if real repetition loops show up. Everything else
+  (`-cram 24576`, VRAM knobs) is identical to `_xhigh`, so both are the same
+  `CALCULATE.md` §6 budget point: `-c 262144 -ts 17,13` at `q8_0/q8_0`, measured.
 - **older unsloth profile** (`unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat`):
   low temperature (0.15–0.6), `--min-p 0.05`, DRY penalties
   (`--dry-multiplier`, `--dry-base 1.75`, `--dry-allowed-length`,
@@ -169,9 +182,9 @@ and prompt cache:
   `full_attention_interval 4`, native context 262144) — `--spec-type draft-mtp`
   applies unchanged;
 - it passes `qwen-general.jinja`, like every script (see below); that template
-  hard-codes the effort level, prepending “think carefully … prioritize
-  correctness” to the system block — which is what this coding config wants
-  anyway. `--reasoning-effort xhigh` is still passed, but only as documentation:
+  hard-codes the effort level, prepending the `xhigh` coding instruction
+  (see “Chat templates”) to the system block — which is what this coding config
+  wants anyway. `--reasoning-effort xhigh` is still passed, but only as documentation:
   the template ignores it;
 - the weights are 22 920 MiB — ~1 530 MiB heavier than lmstudio's Q6_K (21 392 MiB),
   so it runs at `-c 262144 -ts 12,11,7 -b 2048 -ub 256`: `12,11,7` + `-ub 256` is
@@ -345,8 +358,18 @@ What it contains:
   being wrapped in a second empty one. This is the other rendering change, and it
   fixes a real double-`<think>` bug the turbo/gsq-rco and `qwen38-27` files had;
 - **a hard-coded effort level**. The template does **not** read
-  `reasoning_effort`: it always prepends the `xhigh` instruction (“think
-  carefully … prioritize correctness”) to the system block. Every script still
+  `reasoning_effort`: it always prepends the `xhigh` instruction to the system
+  block. Since 2026-10-07 that instruction is code-oriented — besides “validate
+  assumptions / weigh alternatives / prioritize correctness” it tells the model to
+  trace execution with concrete values, derive types and signatures from the code
+  given rather than guess them, enumerate every call site a multi-file change
+  touches, walk the edge cases explicitly (empty, single element, boundary and
+  overflow, negatives, null/missing, concurrency), and re-check its conclusion
+  against the source before answering. It is written for
+  `qwen-qwen38-27-4km_xhigh.bat`, but it is in the shared template, so it reaches
+  all thirteen scripts — including `ornith-*` and the unsloth ones. Keep it short:
+  it sits at position 0 of the prompt, so editing it invalidates every `-cram`
+  prompt-cache prefix and the next run of each script re-prefills. Every script still
   passes `--reasoning-effort xhigh`, so the configs state their intent in a line
   you can read, but the enforcement lives here — the flag's value never reaches
   the prompt. The reason for that split: the server merges the CLI flag and the

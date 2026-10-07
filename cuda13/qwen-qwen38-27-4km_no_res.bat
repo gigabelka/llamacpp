@@ -31,8 +31,9 @@ cd /d "%~dp0.."
   --spec-draft-p-min 0.5 ^
   -t 16 ^
   --threads-batch 16 ^
-  --temp 0.6 ^
+  --temp 0.7 ^
   --top-k 20 ^
-  --top-p 0.95 ^
-  --min-p 0.0
+  --top-p 0.80 ^
+  --min-p 0.0 ^
+  --presence-penalty 0.5
 pause

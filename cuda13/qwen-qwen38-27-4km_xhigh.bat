@@ -32,7 +32,7 @@ cd /d "%~dp0.."
   --spec-draft-p-min 0.5 ^
   -t 16 ^
   --threads-batch 16 ^
-  --temp 0.6 ^
+  --temp 1.0 ^
   --top-k 20 ^
   --top-p 0.95 ^
   --min-p 0.0
