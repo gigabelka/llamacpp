@@ -32,7 +32,8 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | script                             | model (GGUF)                              | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
 | ---------------------------------- | ----------------------------------------- | ----- | ------ | -------- | ------------- | ---------- |
 | `daslab-qwen38-27-iq3_s.bat`       | ISTA-DASLab GSQ-RCO IQ3_S (MTP)           | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
-| `qwen-qwen38-27-4km.bat`           | lmstudio-community Q4_K_M                 | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-4km_xhigh.bat`     | lmstudio-community Q4_K_M (thinking)      | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-4km_no_res.bat`    | lmstudio-community Q4_K_M (no reasoning)  | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
 | `qwen-qwen38-27-6k.bat`            | lmstudio-community Q6_K                   | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
 | `unsloth-qwen38-27-3kxl.bat`       | unsloth UD-Q3_K_XL                        | 0,1   | 229376 | 17,13    | f16 / f16     | 1024 / 256 |
 | `unsloth-qwen38-27-4km.bat`        | unsloth UD-Q4_K_M                         | 0,1   | 180224 | 17,13    | f16 / f16     | 1024 / 256 |
@@ -58,20 +59,27 @@ when copying one to make another:
 - **current profile** (`qwen-*`, `*-6km-test`, `ornith-*`):
   `--jinja` + `--chat-template-file`, model-author sampling defaults
   (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties,
-  `--spec-draft-n-max 2–3`. Every script passes `--reasoning-effort xhigh`, but
-  that flag is a declaration of intent only — the level is hard-coded in
-  `qwen-general.jinja` and cannot be changed from outside, see “Chat
-  templates”.
+  `--spec-draft-n-max 2–3`. Every script except
+  `qwen-qwen38-27-4km_no_res.bat` passes `--reasoning-effort xhigh`, but that flag
+  is a declaration of intent only — the level is hard-coded in `qwen-general.jinja`
+  and cannot be changed from outside, see “Chat templates”. The `_no_res` variant
+  is the one script that turns thinking off instead: it passes `--reasoning off`,
+  and the template then drops the effort instruction and closes the think block
+  (`<think>\n\n</think>\n\n`) so the model answers immediately.
   `davidau-*` is the current profile tuned for code and deviates on purpose:
   `--temp 0.6` (the model card's “Thinking Mode (Precise Coding)” set), with
   `--repeat-penalty 1.0 --presence-penalty 0.0 --frequency-penalty 0.0` spelled
   out because the author insists penalties stay off on MTP builds. Do not
   “normalise” it back to `--temp 1.0`.
   `ornith-ornith15-35-6k.bat` is tuned for code the same way and deviates too:
-  `--temp 0.6`. `qwen-qwen38-27-4km.bat` is the same code tuning on the two-card
-  Q4_K_M: `--temp 0.6`, plus `--reasoning-budget -1` spelled out (“think without
-  a limit” — already the default) and `-cram 24576` in place of the no-op
-  `--cache-reuse 256`. The official Qwen3.8-27B card gives
+  `--temp 0.6`. `qwen-qwen38-27-4km_xhigh.bat` is the same code tuning on the
+  two-card Q4_K_M: `--temp 0.6`, plus `--reasoning-budget -1` spelled out (“think
+  without a limit” — already the default) and `-cram 24576` in place of the no-op
+  `--cache-reuse 256`. `qwen-qwen38-27-4km_no_res.bat` is that same config with
+  thinking disabled — instead of the two reasoning lines it passes a single
+  `--reasoning off`, and everything else (samplers, `-cram 24576`, VRAM knobs) is
+  identical, so it is the same `CALCULATE.md` §6 budget point. The official
+  Qwen3.8-27B card gives
   `1.0` for thinking mode, so the `0.6` here is this repo's code profile rather
   than the card's recommendation — deliberate, do not “normalise” it away. Its
   VRAM knobs are untouched: `-c 262144 -ts 17,13` at `q8_0/q8_0` is the measured
@@ -174,8 +182,9 @@ and prompt cache:
   (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
   with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
   `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
-- it is one of two scripts with `-cram 24576` (the other is
-  `qwen-qwen38-27-4km.bat`): the default 8 GiB prompt cache cannot
+- it is one of three scripts with `-cram 24576` (the others are
+  `qwen-qwen38-27-4km_xhigh.bat` and `qwen-qwen38-27-4km_no_res.bat`): the
+  default 8 GiB prompt cache cannot
   hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
   fills with `making room for prompt cache entry, removing oldest entry` and every
   turn re-prefills the whole prompt (133k tokens ≈ 225 s at ~595 t/s). 24 GiB of
@@ -224,7 +233,7 @@ config here and the only one with room to spare:
   `output.weight` 682.0 MiB (untied, lands on the last card); `token_embd.weight`
   is 388.4 MiB and stays host-mapped (`CPU_Mapped`), which is normal;
 - so GPU-resident weights are ~11 160 MiB — **3.8 GiB lighter than the Q4_K_M of
-  `qwen-qwen38-27-4km.bat`**, the config it was copied from. Measured with
+  `qwen-qwen38-27-4km_xhigh.bat`**, the config it was copied from. Measured with
   `--verbose` at `-c 262144 -ts 17,13 -q8_0/q8_0 -ub 256`: weights divide almost
   evenly (`CUDA0 5587.70` + `CUDA1 5571.99`), main KV 8704 MiB
   (`CUDA0 4896.00` / `CUDA1 3808.00`, 16 layers, 34 816 B/token), RS
@@ -348,7 +357,10 @@ What it contains:
   agent sending `reasoning_effort: "high"` got a 500. The only remaining lever is
   `enable_thinking` (`--reasoning on|off|auto`, or
   `chat_template_kwargs` in the request), which still gates the instruction off
-  entirely;
+  entirely — and which does double duty: with `enable_thinking` false the
+  generation prompt gets a closed empty `<think></think>` instead of an open tag,
+  so the model skips thinking altogether. `qwen-qwen38-27-4km_no_res.bat`
+  (`--reasoning off`) is the script that uses it;
 - `render_content` with image/video branches (and a `raise_exception` if either
   appears in a system message), though every script runs `--no-mmproj`.
 

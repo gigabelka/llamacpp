@@ -1,5 +1,5 @@
 @echo off
-title LLaMA Server - Qwen 3.8 27B Q4_K_M (Coding Config, xhigh)
+title LLaMA Server - Qwen 3.8 27B Q4_K_M (Coding Config, no reasoning)
 set CUDA_DEVICE_ORDER=PCI_BUS_ID
 set CUDA_VISIBLE_DEVICES=0,1
 
@@ -25,8 +25,7 @@ cd /d "%~dp0.."
   -cram 24576 ^
   --jinja ^
   --chat-template-file ".\qwen-general.jinja" ^
-  --reasoning-effort xhigh ^
-  --reasoning-budget -1 ^
+  --reasoning off ^
   --spec-type draft-mtp ^
   --spec-draft-n-max 2 ^
   --spec-draft-p-min 0.5 ^

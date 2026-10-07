@@ -13,7 +13,8 @@ Transformer + SSM модель) в режиме локального OpenAI-со
 
 ```text
 ├── cuda12/                     # Скрипты запуска против сборки llama.cpp под CUDA 12.x
-│   ├── qwen-qwen38-27-4km.bat      # lmstudio-community Q4_K_M
+│   ├── qwen-qwen38-27-4km_xhigh.bat   # lmstudio-community Q4_K_M, thinking on
+│   ├── qwen-qwen38-27-4km_no_res.bat  # то же, но без рассуждений (--reasoning off)
 │   ├── unsloth-qwen38-27-3kxl.bat  # unsloth UD-Q3_K_XL
 │   ├── unsloth-qwen38-27-4km.bat   # unsloth UD-Q4_K_M
 │   ├── unsloth-qwen38-27-5km.bat   # unsloth UD-Q5_K_M
@@ -39,7 +40,8 @@ Transformer + SSM модель) в режиме локального OpenAI-со
 
 | Скрипт | Модель (GGUF) | `-c` | `-ts` | `-ctk`/`-ctv` | `--temp` |
 | :----- | :------------ | ---: | :---- | :------------ | :------- |
-| `qwen-qwen38-27-4km.bat`      | lmstudio-community `Qwen3.8-27B-Q4_K_M.gguf`   | 262144 | 17,13 | q8_0 / q8_0 | 0.15 |
+| `qwen-qwen38-27-4km_xhigh.bat`   | lmstudio-community `Qwen3.8-27B-Q4_K_M.gguf`   | 262144 | 17,13 | q8_0 / q8_0 | 0.6 |
+| `qwen-qwen38-27-4km_no_res.bat`  | то же, без рассуждений (`--reasoning off`)     | 262144 | 17,13 | q8_0 / q8_0 | 0.6 |
 | `unsloth-qwen38-27-3kxl.bat`  | unsloth `Qwen3.8-27B-UD-Q3_K_XL.gguf`          | 229376 | 17,13 | f16 / f16   | 0.15 |
 | `unsloth-qwen38-27-4km.bat`   | unsloth `Qwen3.8-27B-UD-Q4_K_M.gguf`           | 180224 | 17,13 | f16 / f16   | 0.15 |
 | `unsloth-qwen38-27-5km.bat`   | unsloth `Qwen3.8-27B-UD-Q5_K_M.gguf`           | 262144 | 16,14 | q8_0 / q4_0 | 0.15 |

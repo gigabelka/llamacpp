@@ -663,8 +663,10 @@ def vram_budget(model, run, hw):
 ## 9. Ссылки на артефакты в этом репозитории
 
 - Рабочие конфиги:
-  [cuda13/qwen-qwen38-27-4km.bat](cuda13/qwen-qwen38-27-4km.bat)
-  (Q4_K_M: `-c 262144`, `-ts 17,13`, `q8_0/q8_0`),
+  [cuda13/qwen-qwen38-27-4km_xhigh.bat](cuda13/qwen-qwen38-27-4km_xhigh.bat)
+  (Q4_K_M: `-c 262144`, `-ts 17,13`, `q8_0/q8_0`; тот же бюджет — у
+  [cuda13/qwen-qwen38-27-4km_no_res.bat](cuda13/qwen-qwen38-27-4km_no_res.bat),
+  отличие только в выключенных рассуждениях, на VRAM не влияет),
   [cuda13/daslab-qwen38-27-iq3_s.bat](cuda13/daslab-qwen38-27-iq3_s.bat)
   (IQ3_S GSQ-RCO: `-c 262144`, `-ts 17,13`, `q8_0/q8_0`; бюджет — §6.9,
   проверка запаса — §6.9.1),
