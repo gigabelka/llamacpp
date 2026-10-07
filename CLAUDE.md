@@ -32,8 +32,7 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | script                             | model (GGUF)                              | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
 | ---------------------------------- | ----------------------------------------- | ----- | ------ | -------- | ------------- | ---------- |
 | `daslab-qwen38-27-iq3_s.bat`       | ISTA-DASLab GSQ-RCO IQ3_S (MTP)           | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
-| `qwen-qwen38-27-4km_xhigh.bat`     | lmstudio-community Q4_K_M (thinking, main code config) | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
-| `qwen-qwen38-27-4km_no_res.bat`    | lmstudio-community Q4_K_M (no reasoning, instruct samplers) | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `qwen-qwen38-27-4km.bat`           | lmstudio-community Q4_K_M (main code config) | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
 | `qwen-qwen38-27-6k.bat`            | lmstudio-community Q6_K                   | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
 | `unsloth-qwen38-27-3kxl.bat`       | unsloth UD-Q3_K_XL                        | 0,1   | 229376 | 17,13    | f16 / f16     | 1024 / 256 |
 | `unsloth-qwen38-27-4km.bat`        | unsloth UD-Q4_K_M                         | 0,1   | 180224 | 17,13    | f16 / f16     | 1024 / 256 |
@@ -48,8 +47,13 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
 Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
-`--cache-reuse 256`, `--no-mmproj`, `--spec-type draft-mtp`, `-t 16`,
-`--threads-batch 16`, port 1234 — is identical across scripts.
+`--no-mmproj`, `--spec-type draft-mtp`, `-t 16`, `--threads-batch 16`, port 1234
+— is identical across scripts. The prompt-cache flag is **not**: four scripts
+(`qwen-qwen38-27-4km.bat`, `daslab-qwen38-27-iq3_s.bat` and both `davidau-*`) pass
+`-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
+unsupported on a hybrid recurrent context and disables, so it is dead weight
+everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
+24 GiB.
 
 ### Two sampling/template profiles
 
@@ -58,25 +62,26 @@ when copying one to make another:
 
 - **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ornith-*`):
   `--jinja` + `--chat-template-file`, model-author sampling defaults
-  (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties
-  (the one exception is `_no_res`, see below),
+  (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties,
   `--spec-draft-n-max 2–3`. **No script passes `--reasoning-effort` any more**:
   the flag was a complete no-op (the template never read it) and was removed from
   all twelve scripts that carried it on 2026-10-07. Do not re-add it as
   documentation — the effort level is stated once, in the preamble text inside
   `qwen-general.jinja`, and cannot be changed from outside, see “Chat templates”.
-  The `_no_res` variant
-  is the one script that turns thinking off instead: it passes `--reasoning off`,
-  and the template then drops the effort instruction and closes the think block
-  (`<think>\n\n</think>\n\n`) so the model answers immediately.
+  No script turns thinking off either: the `--reasoning off` variant
+  (`qwen-qwen38-27-4km_no_res.bat`, instruct samplers, closed `<think></think>`)
+  existed on 2026-10-07 and was **deleted** the same day, together with
+  `qwen-qwen38-27-4km_xhigh.bat`; the two were collapsed into the single
+  `qwen-qwen38-27-4km.bat` described below. `--reasoning off` remains the one
+  working lever if that fast lane is ever wanted back, see “Chat templates”.
   `davidau-*` is the current profile tuned for code and deviates on purpose:
   `--temp 0.6` (the model card's “Thinking Mode (Precise Coding)” set), with
   `--repeat-penalty 1.0 --presence-penalty 0.0 --frequency-penalty 0.0` spelled
   out because the author insists penalties stay off on MTP builds. Do not
   “normalise” it back to `--temp 1.0`.
-  `ornith-ornith15-35-6k.bat` is tuned for code the same way and deviates too:
-  `--temp 0.6`.
-  `qwen-qwen38-27-4km_xhigh.bat` is **the main config for hard coding work**
+  `ornith-ornith15-35-{5km,6k}.bat` are tuned for code the same way and deviate
+  too: `--temp 0.6`. Only `ornith-ornith15-35-8k.bat` keeps `--temp 1.0`.
+  `qwen-qwen38-27-4km.bat` is **the main config for hard coding work**
   (algorithms, debugging, state tracing, multi-file refactoring, type inference,
   edge cases), and it is the one script running the card's *thinking-mode*
   samplers instead of this repo's `0.6` code profile:
@@ -88,17 +93,10 @@ when copying one to make another:
   this script: `davidau-*` and `ornith-ornith15-35-6k.bat` keep their `0.6`. It
   also spells out `--reasoning-budget -1` (“think without a limit” — already the
   default) and uses `-cram 24576` in place of the no-op `--cache-reuse 256`.
-  `qwen-qwen38-27-4km_no_res.bat` is the same model with thinking off — the fast
-  lane for mechanical work (bulk renames, tool-call loops), not a cheaper stand-in
-  for the config above. Instead of the two reasoning lines it passes a single
-  `--reasoning off`, and because that puts the model in a different operating mode
-  it carries the card's **instruct** samplers rather than the thinking ones:
-  `--temp 0.7 --top-p 0.80 --top-k 20 --min-p 0.0 --presence-penalty 0.5`. The
-  card gives `presence_penalty 1.5` there; `0.5` is this repo's compromise,
-  because 1.5 starts suppressing repeated identifiers and keywords in code — push
-  it towards 1.5 only if real repetition loops show up. Everything else
-  (`-cram 24576`, VRAM knobs) is identical to `_xhigh`, so both are the same
-  `CALCULATE.md` §6 budget point: `-c 262144 -ts 17,13` at `q8_0/q8_0`, measured.
+  Its VRAM point is `CALCULATE.md` §6: `-c 262144 -ts 17,13` at `q8_0/q8_0`,
+  measured. The script was called `qwen-qwen38-27-4km_xhigh.bat` until
+  2026-10-07; the `_xhigh` suffix went away with the `--reasoning-effort` flag,
+  because nothing in the script sets an effort level any more.
 - **older unsloth profile** (`unsloth-qwen38-27-{3kxl,4km,5km,6km}.bat`):
   low temperature (0.15–0.6), `--min-p 0.05`, DRY penalties
   (`--dry-multiplier`, `--dry-base 1.75`, `--dry-allowed-length`,
@@ -198,8 +196,9 @@ and prompt cache:
   (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
   with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
   `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
-- it is one of three scripts with `-cram 24576` (the others are
-  `qwen-qwen38-27-4km_xhigh.bat` and `qwen-qwen38-27-4km_no_res.bat`): the
+- it is one of four scripts with `-cram 24576` (the others are
+  `davidau-qwen38-27-turbo-4k_m.bat`, `qwen-qwen38-27-4km.bat` and
+  `daslab-qwen38-27-iq3_s.bat`): the
   default 8 GiB prompt cache cannot
   hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
   fills with `making room for prompt cache entry, removing oldest entry` and every
@@ -251,7 +250,7 @@ config here and the only one with room to spare:
   `output.weight` 682.0 MiB (untied, lands on the last card); `token_embd.weight`
   is 388.4 MiB and stays host-mapped (`CPU_Mapped`), which is normal;
 - so GPU-resident weights are ~11 160 MiB — **3.8 GiB lighter than the Q4_K_M of
-  `qwen-qwen38-27-4km_xhigh.bat`**, the config it was copied from. Measured with
+  `qwen-qwen38-27-4km.bat`**, the config it was copied from. Measured with
   `--verbose` at `-c 262144 -ts 17,13 -q8_0/q8_0 -ub 256`: weights divide almost
   evenly (`CUDA0 5587.70` + `CUDA1 5571.99`), main KV 8704 MiB
   (`CUDA0 4896.00` / `CUDA1 3808.00`, 16 layers, 34 816 B/token), RS
@@ -305,7 +304,7 @@ config here and the only one with room to spare:
   the level, and `high` or `max` no longer produce a template error either, they
   simply change nothing. `--reasoning-budget -1` (a different flag — the token
   budget for thinking, **not** a no-op) is the unrestricted default, spelled out
-  here and in `qwen-qwen38-27-4km_xhigh.bat`;
+  here and in `qwen-qwen38-27-4km.bat`;
 - the GSQ-RCO model's own sampling defaults are baked into the GGUF as
   `temp 1.0 / top-k 20 / top-p 0.95 / min-p 0.0`; the script overrides `temp` to
   `0.6` for the repo's code profile (the model card recommends no sampling values
@@ -321,8 +320,11 @@ config here and the only one with room to spare:
 
 | file                  | used by                                        |
 | --------------------- | ---------------------------------------------- |
-| `qwen-general.jinja`  | every script in `cuda13/`                      |
-| `agentworld-35.jinja` | nothing — no launch script references it (yet) |
+| `qwen-general.jinja`  | every script in `cuda13/` |
+
+`qwen-general.jinja` is the **only** template left in the repo: `agentworld-35.jinja`
+(an unpatched older base for a different family, referenced by no script) was
+deleted on 2026-10-07, so docs that still mention it are stale.
 
 `qwen-general.jinja` is the single merged template. It replaced four
 near-duplicate files (`qwen38-27.jinja`, `qwen38-27-turbo.jinja`,
@@ -370,8 +372,8 @@ What it contains:
   touches, walk the edge cases explicitly (empty, single element, boundary and
   overflow, negatives, null/missing, concurrency), and re-check its conclusion
   against the source before answering. It is written for
-  `qwen-qwen38-27-4km_xhigh.bat`, but it is in the shared template, so it reaches
-  all thirteen scripts — including `ornith-*` and the unsloth ones. Keep it short:
+  `qwen-qwen38-27-4km.bat`, but it is in the shared template, so it reaches
+  all twelve scripts — including `ornith-*` and the unsloth ones. Keep it short:
   it sits at position 0 of the prompt, so editing it invalidates every `-cram`
   prompt-cache prefix and the next run of each script re-prefills. **This is the
   only place the level is stated.** The scripts used to spell out
@@ -388,8 +390,8 @@ What it contains:
   `chat_template_kwargs` in the request), which still gates the instruction off
   entirely — and which does double duty: with `enable_thinking` false the
   generation prompt gets a closed empty `<think></think>` instead of an open tag,
-  so the model skips thinking altogether. `qwen-qwen38-27-4km_no_res.bat`
-  (`--reasoning off`) is the script that uses it;
+  so the model skips thinking altogether. No script passes it at the moment —
+  `qwen-qwen38-27-4km_no_res.bat` did until it was deleted on 2026-10-07;
 - `render_content` with image/video branches (and a `raise_exception` if either
   appears in a system message), though every script runs `--no-mmproj`.
 
@@ -407,10 +409,10 @@ Caveats that survive the merge:
   gave them the `xhigh` instruction, and that is the one prompt change the merge
   caused. The flag itself is gone from every script now, so the whole question is
   historical;
-- `agentworld-35.jinja` was deliberately left out of the merge: no script
-  references it, and it is an unpatched older base (no `reasoning_effort`, only
-  `messages[0]` as system) for a different family — it has an audio branch
-  (`<|audio_start|>`) the Qwen3.8/Ornith vocabularies do not carry.
+- `agentworld-35.jinja` was left out of the merge and has since been deleted. It
+  was an unpatched older base (no `reasoning_effort`, only `messages[0]` as
+  system) for a different family, with an audio branch (`<|audio_start|>`) the
+  Qwen3.8/Ornith vocabularies do not carry.
 
 **External paths hard-coded in every script** (not in this repo):
 
@@ -433,6 +435,19 @@ Server comes up at `http://127.0.0.1:1234` (Web UI, `/v1/chat/completions`,
 expect the whole GPU set to be free. `pause` at the end keeps the window open on
 exit.
 
+Two failure modes look like success and waste a lot of time:
+
+- **LM Studio's own server binds 1234 too.** The script then fails to bind while
+  `nvidia-smi` shows the cards idle, so it reads as a VRAM problem. Don't kill by
+  process name — re-run on a spare port (`--port 1235`) to confirm, then shut LM
+  Studio's server down.
+- **`-fit/--fit` is ON by default** in this build ("adjust unset arguments to fit
+  in device memory", target 1024 MiB/device), so a run on cards that are merely
+  *idle* rather than *empty* (LM Studio parks ~15 GiB per card at 0 % util)
+  silently down-adjusts unset arguments instead of failing loudly — and the
+  numbers then describe a different config than the script name says. Measure
+  only with the cards free.
+
 ## Editing conventions
 
 - The model is a **hybrid Transformer + SSM**: only every 4th layer has a KV
@@ -442,9 +457,23 @@ exit.
   failure signatures (`retrying without pipeline parallelism`,
   `cudaMalloc failed`, `CPU model buffer` on `blk.*`) and the tightening order
   (`-c` ↓ → `-ctv` coarser → `-ctk` coarser → `-ub` ↓ → `-ngl` ↓ last) are in §4.
-- On every three-card config `-ctk` must stay `q8_0`: `f16` K has no CUDA kernel
-  and dumps the graph onto the CPU (35 graph splits, all 16 cores pegged, prefill
-  down to ~219 t/s instead of ~898).
+- **KV quant pairs are not free-form — only the pairs with an FA kernel work.**
+  `-ctk` must stay `q8_0`: `f16` K has no CUDA kernel and dumps the graph onto the
+  CPU (35 graph splits, all 16 cores pegged, prefill down to ~219 t/s instead of
+  ~898) — measured on three cards, and the missing kernel is not card-count
+  dependent, so the four `unsloth-*` scripts still carrying `-ctk f16` are
+  suspect, not a counter-example. `-ctv q4_0` is worse than useless: there is no
+  FA vector kernel for the `q8_0`/`q4_0` pair either, so **both** K and V silently
+  convert to `f16` and the cache gets bigger, not smaller. That is why
+  `ornith-ornith15-35-6k.bat` OOMs on its first request even though its budget
+  says it fits, and why `-ctv q4_0` in a tightening list (`unsloth-*-5km`,
+  the `davidau-*` / `daslab-*` fallback orders) cannot be trusted as a lever
+  without re-measuring. Prefer `-c` — or `-ub` — instead.
+- `unsloth-qwen38-27-5km.bat` carries **two** settings the rest of the repo calls
+  broken: `-ts 16,14` (known to OOM on this family — the MTP draft KV, the draft
+  compute buffer and `output.weight` all land on the last card) and `-ctv q4_0`.
+  It has not been re-measured since those findings; treat it as untested rather
+  than as precedent.
 - `-ts` is deliberately skewed — `17,13` on two cards because KV / SSM / pipeline
   compute buffers land on the higher card under `-sm layer`, and away from GPU2
   on three cards because it sits on a Gen4 x4 link while the others are Gen5 x8.
