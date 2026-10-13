@@ -32,6 +32,7 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | script                             | model (GGUF)                              | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
 | ---------------------------------- | ----------------------------------------- | ----- | ------ | -------- | ------------- | ---------- |
 | `daslab-qwen38-27-iq3_s.bat`       | ISTA-DASLab GSQ-RCO IQ3_S (MTP)           | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
+| `ukisai-swift15-qwen38-27-iq3_s.bat` | ukisai Swift-1.5 GSQ-RCO IQ3_S (MTP)    | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
 | `qwen-qwen38-27-4km.bat`           | lmstudio-community Q4_K_M (main code config) | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 1024 / 256 |
 | `qwen-qwen38-27-6k.bat`            | lmstudio-community Q6_K                   | 0,1,2 | 262144 | 11,10,9  | q8_0 / q8_0   | 2048 / 512 |
 | `unsloth-qwen38-27-3kxl.bat`       | unsloth UD-Q3_K_XL                        | 0,1   | 229376 | 17,13    | f16 / f16     | 1024 / 256 |
@@ -48,9 +49,9 @@ Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
 Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
 `--no-mmproj`, `--spec-type draft-mtp`, `-t 16`, `--threads-batch 16`, port 1234
-— is identical across scripts. The prompt-cache flag is **not**: four scripts
-(`qwen-qwen38-27-4km.bat`, `daslab-qwen38-27-iq3_s.bat` and both `davidau-*`) pass
-`-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
+— is identical across scripts. The prompt-cache flag is **not**: five scripts
+(`qwen-qwen38-27-4km.bat`, `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat`
+and both `davidau-*`) pass `-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
 unsupported on a hybrid recurrent context and disables, so it is dead weight
 everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
 24 GiB.
@@ -60,7 +61,7 @@ everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
 The scripts fall into two groups, and this is the main thing to keep straight
 when copying one to make another:
 
-- **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ornith-*`):
+- **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ukisai-*`, `ornith-*`):
   `--jinja` + `--chat-template-file`, model-author sampling defaults
   (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties,
   `--spec-draft-n-max 2–3`. **No script passes `--reasoning-effort` any more**:
@@ -196,9 +197,9 @@ and prompt cache:
   (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
   with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
   `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
-- it is one of four scripts with `-cram 24576` (the others are
-  `davidau-qwen38-27-turbo-4k_m.bat`, `qwen-qwen38-27-4km.bat` and
-  `daslab-qwen38-27-iq3_s.bat`): the
+- it is one of five scripts with `-cram 24576` (the others are
+  `davidau-qwen38-27-turbo-4k_m.bat`, `qwen-qwen38-27-4km.bat`,
+  `daslab-qwen38-27-iq3_s.bat` and `ukisai-swift15-qwen38-27-iq3_s.bat`): the
   default 8 GiB prompt cache cannot
   hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
   fills with `making room for prompt cache entry, removing oldest entry` and every
@@ -316,6 +317,25 @@ config here and the only one with room to spare:
   tight card, see above) → `-ub 128` → `-ctv q4_0` →
   `-ot "output.weight=CUDA0"` → `-c 229376` → `-ngl` last.
 
+`ukisai-swift15-qwen38-27-iq3_s.bat` runs `Swift-1.5-Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf`
+(`c:\Users\viktor\.lmstudio\models\ukisai\Swift-1.5-Qwen3.8-27B-GSQ-RCO-GGUF\`) — a post-trained
+(agentic / long-horizon / coding) derivative of Qwen3.8-27B, quantised with the same GSQ-RCO recipe
+as the DASLab file. The GGUF header has the same geometry (`qwen35`, 65 blocks, `nextn_predict_layers 1`,
+`n_head_kv 4`, `key/value_length 256`, `full_attention_interval 4`, 866 tensors), so the `daslab-*`
+section above applies unchanged: `-ts 17,13`, `-c 262144`, `q8_0/q8_0`, `-ub 256`, `-cram 24576`,
+`--spec-type draft-mtp`. The file is 12 120 016 896 B, +10.5 MiB over the DASLab one, so the VRAM
+budget is the same in practice — but the config is **not measured**; every number in the `daslab-*`
+section belongs to the DASLab file.
+
+What differs from the DASLab config:
+
+- `--temp 1.0` instead of `0.6`. The GGUF and the Swift 1.5 card both carry
+  `temp 1.0 / top-k 20 / top-p 0.95 / min-p 0.0`, and this is the thinking-mode sampler set the
+  `qwen-qwen38-27-4km.bat` profile keeps for the same reason: lowering the temperature inside `<think>`
+  is the loop failure to avoid. If generation loops or the MTP acceptance is poor, `--temp 0.6` is the
+  one-line switch back to the DASLab profile;
+- vision is off (`--no-mmproj`): no `mmproj` is published for this release.
+
 ## Chat templates
 
 | file                  | used by                                        |
@@ -373,7 +393,7 @@ What it contains:
   overflow, negatives, null/missing, concurrency), and re-check its conclusion
   against the source before answering. It is written for
   `qwen-qwen38-27-4km.bat`, but it is in the shared template, so it reaches
-  all twelve scripts — including `ornith-*` and the unsloth ones. Keep it short:
+  all thirteen scripts — including `ornith-*`, `ukisai-*` and the unsloth ones. Keep it short:
   it sits at position 0 of the prompt, so editing it invalidates every `-cram`
   prompt-cache prefix and the next run of each script re-prefills. **This is the
   only place the level is stated.** The scripts used to spell out

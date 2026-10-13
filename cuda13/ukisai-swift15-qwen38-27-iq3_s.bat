@@ -1,0 +1,41 @@
+@echo off
+title LLaMA Server - Swift 1.5 Qwen 3.8 27B GSQ-RCO IQ3_S (Coding Config, xhigh)
+set CUDA_DEVICE_ORDER=PCI_BUS_ID
+set CUDA_VISIBLE_DEVICES=0,1
+
+cd /d "%~dp0.."
+
+"c:\Llamacpp\cuda13\llama-server.exe" ^
+  -m "c:\Users\viktor\.lmstudio\models\ukisai\Swift-1.5-Qwen3.8-27B-GSQ-RCO-GGUF\Swift-1.5-Qwen3.8-27B-GSQ-RCO-IQ3_S-mtp.gguf" ^
+  -ngl 99 ^
+  --host 127.0.0.1 ^
+  --port 1234 ^
+  -sm layer ^
+  -ts 17,13 ^
+  -c 262144 ^
+  -np 1 ^
+  -kvu ^
+  -n -1 ^
+  -b 1024 ^
+  -ub 256 ^
+  -ctk q8_0 ^
+  -ctv q8_0 ^
+  -fa on ^
+  --no-mmproj ^
+  -cram 24576 ^
+  --jinja ^
+  --chat-template-file ".\qwen-general.jinja" ^
+  --reasoning-budget -1 ^
+  --spec-type draft-mtp ^
+  --spec-draft-n-max 2 ^
+  --spec-draft-p-min 0.5 ^
+  -t 16 ^
+  --threads-batch 16 ^
+  --temp 1.0 ^
+  --top-k 20 ^
+  --top-p 0.95 ^
+  --min-p 0.0 ^
+  --repeat-penalty 1.0 ^
+  --presence-penalty 0.0 ^
+  --frequency-penalty 0.0
+pause
