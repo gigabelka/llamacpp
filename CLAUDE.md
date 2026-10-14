@@ -45,16 +45,18 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | `davidau-qwen38-27-turbo-6k.bat`   | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K   | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 | `davidau-qwen38-27-turbo-4k_m.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q4_K_M | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 2048 / 128 |
 | `bytkim-qwen38-27-pi-4km.bat`      | bytkim Qwen3.8-27B-pi Q4_K_M (MTP head in a separate `-md` file) | 0,1 | 262144 | 17,13 | q8_0 / q8_0 | 2048 / 128 |
+| `unsloth-agentworld-35-5km.bat`    | unsloth Qwen-AgentWorld-35B-A3B UD-Q5_K_M (no MTP head) | 0,1 | 262144 | 1,1 | q8_0 / q8_0 | 2048 / 128 |
 
 Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
 Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
 `--no-mmproj`, `--spec-type draft-mtp`, `-t 16`, `--threads-batch 16`, port 1234
-— is identical across scripts, with one exception: `bytkim-qwen38-27-pi-4km.bat` takes its
-MTP head from a separate file (`-md`, `-ngld 99`) instead of from the main GGUF. The prompt-cache
-flag is **not** identical either: six scripts (`qwen-qwen38-27-4km.bat`,
+— is identical across scripts, with two exceptions: `bytkim-qwen38-27-pi-4km.bat` takes its
+MTP head from a separate file (`-md`, `-ngld 99`) instead of from the main GGUF, and
+`unsloth-agentworld-35-5km.bat` has no MTP head at all, so it passes no `--spec-*` flags. The prompt-cache
+flag is **not** identical either: seven scripts (`qwen-qwen38-27-4km.bat`,
 `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat`, `bytkim-qwen38-27-pi-4km.bat`
-and both `davidau-*`) pass `-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
+both `davidau-*` and `unsloth-agentworld-35-5km.bat`) pass `-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
 unsupported on a hybrid recurrent context and disables, so it is dead weight
 everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
 24 GiB.
@@ -64,7 +66,7 @@ everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
 The scripts fall into two groups, and this is the main thing to keep straight
 when copying one to make another:
 
-- **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ukisai-*`, `ornith-*`, `bytkim-*`):
+- **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ukisai-*`, `ornith-*`, `bytkim-*`, `unsloth-agentworld-*`):
   `--jinja` + `--chat-template-file`, model-author sampling defaults
   (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties,
   `--spec-draft-n-max 2–3`. **No script passes `--reasoning-effort` any more**:
@@ -85,6 +87,9 @@ when copying one to make another:
   “normalise” it back to `--temp 1.0`.
   `ornith-ornith15-35-{5km,6k}.bat` are tuned for code the same way and deviate
   too: `--temp 0.6`. Only `ornith-ornith15-35-8k.bat` keeps `--temp 1.0`.
+  `unsloth-agentworld-35-5km.bat` is `--temp 0.6` as well: that is the card's own sampler set
+  (`temp 0.6 / top_p 0.95 / top_k 20`, also baked into the GGUF metadata), and there is no
+  thinking-mode instruction to contradict. It passes no `--spec-*` flags (no MTP head).
   `qwen-qwen38-27-4km.bat` is **the main config for hard coding work**
   (algorithms, debugging, state tracing, multi-file refactoring, type inference,
   edge cases), and it is the one script running the card's *thinking-mode*
@@ -200,10 +205,10 @@ and prompt cache:
   (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
   with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
   `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
-- it is one of six scripts with `-cram 24576` (the others are
+- it is one of seven scripts with `-cram 24576` (the others are
   `davidau-qwen38-27-turbo-4k_m.bat`, `qwen-qwen38-27-4km.bat`,
   `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat` and
-  `bytkim-qwen38-27-pi-4km.bat`): the
+  `bytkim-qwen38-27-pi-4km.bat` and `unsloth-agentworld-35-5km.bat`): the
   default 8 GiB prompt cache cannot
   hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
   fills with `making room for prompt cache entry, removing oldest entry` and every
@@ -258,6 +263,52 @@ and `--fit` is on by default, so the head could otherwise fall to CPU without a 
 - If it OOMs, in this order: `-ctkd q8_0 -ctvd q8_0` (draft KV f16 → q8_0, −480 MiB measured on the
   DASLab file) → `-devd CUDA0` (move the head off the tight card) → `-c 229376` → `-ngl` last.
   Do not use `-ctv q4_0`: there is no FA kernel for that pair.
+
+`unsloth-agentworld-35-5km.bat` runs `Qwen-AgentWorld-35B-A3B-UD-Q5_K_M.gguf`
+(`c:\Users\viktor\.lmstudio\models\unsloth\Qwen-AgentWorld-35B-A3B-GGUF\`), Qwen's AgentWorld 35B-A3B
+in Unsloth's Q5_K_M quant. The model card frames it as a *world model*: it thinks, then predicts the
+environment's observation for an agent action. It is not a coding-tuned release, so the code profile
+here (`--temp 0.6`) is this repo's choice rather than the card's. Arch `qwen35moe`, the same MoE and
+hybrid geometry as the Ornith scripts (40 blocks, 256 experts / 8 active + shared, `n_head_kv 2`,
+`full_attention_interval 4`, native context 262144; `q8_0/q8_0` is 10 880 B/token). Differences from the
+Ornith script it was copied from:
+
+- **No MTP head.** 40 blocks and no `blk.40.nextn.*` (the Ornith GGUF has 41 with the head), so the
+  script has no `--spec-*` flags at all;
+- GPU-resident weights ≈ 24 704 MiB: `blk.*` 24 189 MiB plus `output.weight` 515 MiB (Q8_0, untied).
+  `token_embd` 515 MiB stays host-mapped. The file is 24.64 GiB;
+- `-ts 1,1 -ub 128 -c 262144`, from a dry run of `llama-fit-params.exe` with the cards free and
+  `--fit-target 0`. Margin is free VRAM after projected use, against the fitter's per-card budget
+  (15 138 MiB CUDA0 / 15 142 MiB CUDA1):
+
+  | config | CUDA0 margin | CUDA1 margin |
+  | --- | --- | --- |
+  | `-ts 14,13 -ub 256` (the Ornith split) | −542 (OOM) | +1189 |
+  | `-ts 12,13 -ub 256` | +669 | −22 (OOM) |
+  | `-ts 1,1 -ub 256` | +64 | +586 |
+  | `-ts 1,1 -ub 160` | +275 | +793 |
+  | **`-ts 1,1 -ub 128`** (in the script) | **+346** | **+862** |
+  | `-ts 1,1 -ub 128 -c 229376` | +612 | +1128 |
+
+  Blocks are ~600–660 MiB each and cannot be split, so `1,1` is the most even split available. These
+  are projections; the one real reading is at the end of this section;
+- `-ot "output.weight=CUDA0"` would add ~600 MiB of margin on the tight card, but it changes the graph
+  layout (compute buffers shrink, CUDA0 795 → 590 MiB), so it needs a server-log check for pipeline
+  parallelism before it is trusted. It is not used;
+- `-cram 24576` is kept for consistency with the other hybrid configs. KV per token here is about a
+  third of Qwen3.8's, so the default 8 GiB may well be enough. Not tested either way;
+- `--reasoning-budget -1` is spelled out (unlimited thinking, already the default). Vision is off
+  (`--no-mmproj`); no mmproj is in the model directory;
+- if it OOMs: `-c 229376`, then `-c 196608`, then `-ngl` last. `-ctv q4_0` is not an option (no FA
+  kernel for that pair).
+
+**Measured once.** Cards free, `-c 262144 -ts 1,1 -ub 128 -cram 24576`, after load and one request of
+~2 130 generated tokens (`finish_reason stop`, reasoning in `reasoning_content`, valid code in `content`):
+`nvidia-smi` read **15 028 / 14 512 MiB** of 16 311 (about 1 020 / 1 540 MiB free against the 16 050 MiB
+base used elsewhere in this file). Generation was ~102 t/s on that one short prompt; this config has no
+MTP head, so there is no draft-acceptance figure. One sample is not an A/B. At start the log prints
+`failed to fit params … n_gpu_layers already set by user to 99, abort`; that is a warning, and the
+server still comes up.
 
 `unsloth-qwen38-27-6km-test.bat` — a three-card experiment for UD-Q6_K_M, the only
 script with `-ot "token_embd.weight=CUDA0"` and a skewed `-ts 12,11,7` — **no longer
@@ -422,7 +473,7 @@ What it contains:
   overflow, negatives, null/missing, concurrency), and re-check its conclusion
   against the source before answering. It is written for
   `qwen-qwen38-27-4km.bat`, but it is in the shared template, so it reaches
-  all fourteen scripts — including `ornith-*`, `ukisai-*` and the unsloth ones. Keep it short:
+  all fifteen scripts — including `ornith-*`, `ukisai-*` and the unsloth ones. Keep it short:
   it sits at position 0 of the prompt, so editing it invalidates every `-cram`
   prompt-cache prefix and the next run of each script re-prefills. **This is the
   only place the level is stated.** The scripts used to spell out
