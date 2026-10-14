@@ -44,13 +44,16 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | `ornith-ornith15-35-5km.bat`       | ornith-ai Ornith-1.5-35B Q5_K_M           | 0,1   | 262144 | 14,13    | q8_0 / q8_0   | 2048 / 256 |
 | `davidau-qwen38-27-turbo-6k.bat`   | DavidAU TurboFCF NEO-CODER-MAX-MTP Q6_K   | 0,1,2 | 262144 | 12,11,7  | q8_0 / q8_0   | 2048 / 256 |
 | `davidau-qwen38-27-turbo-4k_m.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q4_K_M | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 2048 / 128 |
+| `bytkim-qwen38-27-pi-4km.bat`      | bytkim Qwen3.8-27B-pi Q4_K_M (MTP head in a separate `-md` file) | 0,1 | 262144 | 17,13 | q8_0 / q8_0 | 2048 / 128 |
 
 Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
 Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
 `--no-mmproj`, `--spec-type draft-mtp`, `-t 16`, `--threads-batch 16`, port 1234
-— is identical across scripts. The prompt-cache flag is **not**: five scripts
-(`qwen-qwen38-27-4km.bat`, `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat`
+— is identical across scripts, with one exception: `bytkim-qwen38-27-pi-4km.bat` takes its
+MTP head from a separate file (`-md`, `-ngld 99`) instead of from the main GGUF. The prompt-cache
+flag is **not** identical either: six scripts (`qwen-qwen38-27-4km.bat`,
+`daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat`, `bytkim-qwen38-27-pi-4km.bat`
 and both `davidau-*`) pass `-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
 unsupported on a hybrid recurrent context and disables, so it is dead weight
 everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
@@ -61,7 +64,7 @@ everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
 The scripts fall into two groups, and this is the main thing to keep straight
 when copying one to make another:
 
-- **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ukisai-*`, `ornith-*`):
+- **current profile** (`qwen-*`, `davidau-*`, `daslab-*`, `ukisai-*`, `ornith-*`, `bytkim-*`):
   `--jinja` + `--chat-template-file`, model-author sampling defaults
   (`--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`), no repeat/DRY penalties,
   `--spec-draft-n-max 2–3`. **No script passes `--reasoning-effort` any more**:
@@ -197,9 +200,10 @@ and prompt cache:
   (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
   with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
   `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
-- it is one of five scripts with `-cram 24576` (the others are
+- it is one of six scripts with `-cram 24576` (the others are
   `davidau-qwen38-27-turbo-4k_m.bat`, `qwen-qwen38-27-4km.bat`,
-  `daslab-qwen38-27-iq3_s.bat` and `ukisai-swift15-qwen38-27-iq3_s.bat`): the
+  `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat` and
+  `bytkim-qwen38-27-pi-4km.bat`): the
   default 8 GiB prompt cache cannot
   hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
   fills with `making room for prompt cache entry, removing oldest entry` and every
@@ -229,6 +233,31 @@ and prompt cache:
 `qwen-general.jinja`. It has **not** been measured yet — `-ub 128` halves the
 compute buffer relative to `-ub 256`, which is presumably the headroom the
 heavier Q4_K_M weights need, but that is inference, not a logged run.
+
+`bytkim-qwen38-27-pi-4km.bat` runs `Qwen3.8-27B-pi-Q4_K_M.gguf`
+(`c:\Users\viktor\.lmstudio\models\bytkim\Qwen3.8-27B-pi-GGUF\`), bytkim's "pi" fine-tune of
+Qwen3.8-27B (SFT on successful coding-agent sessions, then GRPO with a reasoning-efficiency reward).
+Unlike the other Qwen3.8 configs, the main GGUF has **no** MTP head — no `blk.64.*`, no
+`nextn_predict_layers` — so it is 64 blocks, not 65. The head ships as a separate file,
+`mtp/mtp-Qwen3.8-27B-pi-Q4_0.gguf` (2 008 054 464 B = 1.87 GiB), passed with `-md` and
+`--spec-type draft-mtp`. `-ngld 99` keeps the draft fully on GPU: `-ngld` defaults to `auto`,
+and `--fit` is on by default, so the head could otherwise fall to CPU without a loud failure.
+
+- Geometry is the Qwen3.8-27B one (`qwen35`, `d 5120`, `n_head_kv 4`, `key/value_length 256`,
+  `full_attention_interval 4`, native context 262144), so the body's KV/RS figures in `CALCULATE.md`
+  §6 apply. The head adds its own draft KV and compute buffer, as on the other MTP configs.
+- Sampling is the card's thinking-mode set `--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`, the same
+  as `qwen-qwen38-27-4km.bat`. Do not lower the temperature to 0.6 here either (loops inside `<think>`).
+  No penalties: the card sets none for thinking mode.
+- `--spec-draft-n-max 2`, not the card's 3: on the DASLab file `n-max 3` lowered MTP acceptance from
+  ~76 % to ~71 % and added ~1 GiB of draft compute buffer.
+- Two cards, `-ts 17,13 -c 262144`, `q8_0/q8_0`, `-b 2048 -ub 128` (the `davidau-*-4k_m` batch/ubatch
+  pair, to halve the compute buffer). **Not measured.** The VRAM budget is an estimate only; CUDA1
+  is expected to be the tight card, as on every Qwen3.8 config here.
+- Vision is off (`--no-mmproj`); `mmproj-Qwen3.8-27B-pi-BF16.gguf` (931 MB) sits next to the model.
+- If it OOMs, in this order: `-ctkd q8_0 -ctvd q8_0` (draft KV f16 → q8_0, −480 MiB measured on the
+  DASLab file) → `-devd CUDA0` (move the head off the tight card) → `-c 229376` → `-ngl` last.
+  Do not use `-ctv q4_0`: there is no FA kernel for that pair.
 
 `unsloth-qwen38-27-6km-test.bat` — a three-card experiment for UD-Q6_K_M, the only
 script with `-ot "token_embd.weight=CUDA0"` and a skewed `-ts 12,11,7` — **no longer
@@ -393,7 +422,7 @@ What it contains:
   overflow, negatives, null/missing, concurrency), and re-check its conclusion
   against the source before answering. It is written for
   `qwen-qwen38-27-4km.bat`, but it is in the shared template, so it reaches
-  all thirteen scripts — including `ornith-*`, `ukisai-*` and the unsloth ones. Keep it short:
+  all fourteen scripts — including `ornith-*`, `ukisai-*` and the unsloth ones. Keep it short:
   it sits at position 0 of the prompt, so editing it invalidates every `-cram`
   prompt-cache prefix and the next run of each script re-prefills. **This is the
   only place the level is stated.** The scripts used to spell out
