@@ -602,6 +602,11 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   immediately with `Free memory on device cuda:0 (14.51/15.9 GiB) … less than desired`) →
   `--max-model-len` down → drop the two `--speculative-config.*` lines → `--enforce-eager` last.
   `--attention-backend TRITON_ATTN` sidesteps the flashinfer JIT entirely if it ever breaks again;
+- **vLLM checks the request's `model` field; `llama-server` does not.** Clients configured for the
+  llama.cpp scripts send `"model": "Llamacpp"` and got `404 The model 'Llamacpp' does not exist`, so
+  `--served-model-name` lists `Llamacpp` as an alias after the real name (the first name is what
+  `/v1/models` and responses report). Add any other name a client sends to the same list.
+  The `HEAD /api/hello 404` lines in the log are a client's Ollama probe and are harmless;
 - **the OpenAI field is `reasoning`, not `reasoning_content`** in vLLM 0.30, and
   `usage.completion_tokens_details.reasoning_tokens` counts it. Do not conclude the reasoning
   parser is broken from an empty `reasoning_content`;
