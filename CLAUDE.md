@@ -46,6 +46,7 @@ Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 | `davidau-qwen38-27-turbo-4k_m.bat` | DavidAU TurboFCF NEO-CODER-MAX-MTP Q4_K_M | 0,1   | 262144 | 17,13    | q8_0 / q8_0   | 2048 / 128 |
 | `bytkim-qwen38-27-pi-4km.bat`      | bytkim Qwen3.8-27B-pi Q4_K_M (MTP head in a separate `-md` file) | 0,1 | 262144 | 17,13 | q8_0 / q8_0 | 2048 / 128 |
 | `unsloth-agentworld-35-5km.bat`    | unsloth Qwen-AgentWorld-35B-A3B UD-Q5_K_M (no MTP head) | 0,1 | 262144 | 1,1 | q8_0 / q8_0 | 2048 / 128 |
+| `venastine-xing4-29-a4b-5km.bat`   | Venastine Xing4.0-29B-A4B Q5_K_M (MLA + mHC MoE; own template; **arch not supported by this build**) | 0,1,2 | 262144 | 16,15,10 | q8_0 / q8_0 | 2048 / 256 |
 
 Card count is set per script via `CUDA_VISIBLE_DEVICES` (with
 `CUDA_DEVICE_ORDER=PCI_BUS_ID`), so the number of `-ts` fields must match it.
@@ -54,9 +55,9 @@ Everything else — `-ngl 99`, `-sm layer`, `-fa on`, `-kvu`, `-np 1`, `-n -1`,
 — is identical across scripts, with two exceptions: `bytkim-qwen38-27-pi-4km.bat` takes its
 MTP head from a separate file (`-md`, `-ngld 99`) instead of from the main GGUF, and
 `unsloth-agentworld-35-5km.bat` has no MTP head at all, so it passes no `--spec-*` flags. The prompt-cache
-flag is **not** identical either: seven scripts (`qwen-qwen38-27-4km.bat`,
+flag is **not** identical either: eight scripts (`qwen-qwen38-27-4km.bat`,
 `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat`, `bytkim-qwen38-27-pi-4km.bat`
-both `davidau-*` and `unsloth-agentworld-35-5km.bat`) pass `-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
+both `davidau-*`, `unsloth-agentworld-35-5km.bat` and `venastine-xing4-29-a4b-5km.bat`) pass `-cram 24576`, the other eight pass `--cache-reuse 256` — which this build logs as
 unsupported on a hybrid recurrent context and disables, so it is dead weight
 everywhere in this repo. See the `davidau-qwen38-27-turbo-6k.bat` notes for why
 24 GiB.
@@ -205,10 +206,11 @@ and prompt cache:
   (GPU1 includes ~1 600 MiB of desktop usage), nothing on CPU, 32.1 t/s generation
   with MTP accepting 83 % of drafts at `mean len 3.24`. If it OOMs, go
   `-ts 11,11,8`, then `-ctv q4_0`, and only then `-c`;
-- it is one of seven scripts with `-cram 24576` (the others are
+- it is one of eight scripts with `-cram 24576` (the others are
   `davidau-qwen38-27-turbo-4k_m.bat`, `qwen-qwen38-27-4km.bat`,
-  `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat` and
-  `bytkim-qwen38-27-pi-4km.bat` and `unsloth-agentworld-35-5km.bat`): the
+  `daslab-qwen38-27-iq3_s.bat`, `ukisai-swift15-qwen38-27-iq3_s.bat`,
+  `bytkim-qwen38-27-pi-4km.bat`, `unsloth-agentworld-35-5km.bat` and
+  `venastine-xing4-29-a4b-5km.bat`): the
   default 8 GiB prompt cache cannot
   hold even two entries for this context type (one is 2.6–7.3 GiB), so the log
   fills with `making room for prompt cache entry, removing oldest entry` and every
@@ -416,13 +418,71 @@ What differs from the DASLab config:
   one-line switch back to the DASLab profile;
 - vision is off (`--no-mmproj`): no `mmproj` is published for this release.
 
+`venastine-xing4-29-a4b-5km.bat` runs `Xing4.0-29B-A4B-Q5_K_M.gguf`
+(`c:\Users\viktor\.lmstudio\models\Venastine-Research\Xing4.0-29B-A4B-GGUF\`) — China Telecom
+AI's Xing4.0-29B-A4B (Apache-2.0; the XingChen/TeleChat line), an agentic MoE, quantised by
+Venastine-Research. The folder holds that one file and a `config.json` — no `mmproj`, no separate
+MTP file, no template file. **This model does not run on this bench**, and the script exists so the
+config is ready the day it does. The agreed route is to **wait for the upstream merge** and update
+`c:\Llamacpp\cuda13\` in place — not to build the `xing4_0-port` fork locally (no cmake, CUDA
+Toolkit or Visual Studio on this box anyway). So do not propose building a fork again; when a build
+with `xing4` in it lands, the script below runs unchanged:
+
+- **`general.architecture` is `xing4_0`, which stock llama.cpp does not implement.** The local
+  build in `c:\Llamacpp\cuda13\` (15.10.2026 — it has `deepseek4.cpp`, `qwen35.cpp`,
+  `glm5-next.cpp`, `hy-v4.cpp`) has no `xing4` string in any DLL, and neither do the LM Studio
+  runtimes up to `llama.cpp-win-x86_64-nvidia-cuda-2.58.1`. Loading it fails in 0.24 s with
+  `llama_model_load: error loading model: unknown model architecture: 'xing4_0'`, before any VRAM
+  is touched. Support lives only in the unmerged upstream PRs **#29012** and **#29141**
+  (branch `xing4_0-port`), which also add the GGML ops the architecture needs
+  (`XING4_0_HC_PRE` / `HC_COMB` / `HC_POST`, or the DeepSeek-V4 mHC ops it was rebased onto).
+  Check those two PRs for merge status rather than re-diagnosing the failure;
+- the architecture is a **pure transformer**, not a hybrid: MLA attention (DeepSeek-V3 style) +
+  MoE + Multi-headed Hyper-Connections. 41 blocks, of which `blk.40` is the built-in MTP head
+  (`nextn_predict_layers = 1`, tensors `blk.40.nextn.*`), so `--spec-type draft-mtp` applies with
+  no `-md` file;
+- geometry: `d 3584`, 32 heads, `head_count_kv` **1** (MLA compresses KV), `q_lora_rank 768`,
+  `kv_lora_rank 512`, `attention.key_length` **576**, `attention.value_length` **512**;
+  MoE with 64 experts / 4 active + 1 shared, `expert_ff 1024`; first 2 blocks dense
+  (`leading_dense_block_count 2`); native context 262144 with YaRN (factor 64 from 4096);
+  vocab 131072, SPM tokenizer; `tie_word_embeddings` false;
+- **its own chat template, not ChatML.** The GGUF carries a Xing template built on
+  `<_system>` / `<_user>` / `<_bot>` / `<_end>`, `<tools>` for function signatures and
+  `<tool_call>{name}<param_key>…</param_key><param_value>…</param_value></tool_call>` for calls.
+  `qwen-general.jinja` is useless here; this script passes `xing4-general.jinja`, see “Chat templates”;
+- **why three cards.** GPU-resident weights are 20 869.1 MiB (`blk.*` 20 501.597 + `output.weight`
+  367.500 + `output_norm`; `token_embd.weight` 308.0 MiB stays host-mapped) and the MLA KV cache
+  costs (576 + 512) elements per token per layer — 46 240 B/token at `q8_0`, i.e. **11 560 MiB** at
+  `-c 262144`, plus 289 MiB for the draft layer. 20 869 + 11 560 = 32 429 MiB is already over the
+  two cards' 32 100 MiB before any compute buffer, so two cards cannot run the native context.
+  Full budget ≈ 33 000–34 000 MiB of 48 150;
+- **`-ts 16,15,10`** is the three-card ratio of `davidau-qwen38-27-turbo-6k.bat` (`12,11,7` on
+  65 blocks) scaled to 41 blocks — a skew away from GPU2 on its Gen4 x4 link. Because layers are
+  indivisible and alternate between 490.191 and 520.406 MiB (`ffn_down_exps` is Q6_K in 19 of the
+  39 MoE blocks), it lands as **17 / 16 / 8 blocks** → 8 233.1 / 7 503.9 / 4 764.6 MiB of weights
+  plus 4 913 / 4 624 / 2 312 MiB of KV. CUDA0 is the loaded card (~14 750 of 16 050 with a
+  ~1 600 MiB compute buffer). The MTP head `blk.40` (1 151.978 MiB) is the last block, so it and
+  its draft KV + draft graph sit on GPU2 — use `-devd CUDA0` if that turns out to cost throughput,
+  as in `bytkim-qwen38-27-pi-4km.bat`. **Nothing here is measured**; the tensor sizes are exact
+  (from the GGUF tensor table), the KV and compute figures are estimates;
+- sampling is the model's own thinking-mode set — `--temp 1.0 --top-k 20 --top-p 0.95 --min-p 0.0`
+  plus `--repeat-penalty 1.05`, which is what the GGUF carries as `general.sampling.*`. That is the
+  `qwen-qwen38-27-4km.bat` / `bytkim-*` choice, not the repo's `0.6` code profile, and for the same
+  reason: this model thinks by default and the template's `enable_thinking` is the only lever;
+- if it OOMs, in this order: `-devd CUDA0` → `-ts 15,15,11` → `-ub 128` → `-c 229376` → `-ngl`
+  last. Do **not** reach for `-ctv q4_0`: besides this repo's findings about the `q8_0`/`q4_0`
+  pair, ports of this architecture report that quantised KV is silently ignored on it.
+
 ## Chat templates
 
 | file                  | used by                                        |
 | --------------------- | ---------------------------------------------- |
-| `qwen-general.jinja`  | every script in `cuda13/` |
+| `qwen-general.jinja`  | every script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
+| `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
 
-`qwen-general.jinja` is the **only** template left in the repo: `agentworld-35.jinja`
+There are now **two** templates. `qwen-general.jinja` serves every script but one.
+`xing4-general.jinja` serves only `venastine-xing4-29-a4b-5km.bat`, because that model
+speaks a different protocol altogether — see the end of this section. `agentworld-35.jinja`
 (an unpatched older base for a different family, referenced by no script) was
 deleted on 2026-10-07, so docs that still mention it are stale.
 
@@ -473,7 +533,9 @@ What it contains:
   overflow, negatives, null/missing, concurrency), and re-check its conclusion
   against the source before answering. It is written for
   `qwen-qwen38-27-4km.bat`, but it is in the shared template, so it reaches
-  all fifteen scripts — including `ornith-*`, `ukisai-*` and the unsloth ones. Keep it short:
+  all fifteen scripts that use it — including `ornith-*`, `ukisai-*` and the unsloth
+  ones. (`venastine-xing4-29-a4b-5km.bat` gets the same text through
+  `xing4-general.jinja` instead, see below.) Keep it short:
   it sits at position 0 of the prompt, so editing it invalidates every `-cram`
   prompt-cache prefix and the next run of each script re-prefills. **This is the
   only place the level is stated.** The scripts used to spell out
@@ -513,6 +575,30 @@ Caveats that survive the merge:
   was an unpatched older base (no `reasoning_effort`, only `messages[0]` as
   system) for a different family, with an audio branch (`<|audio_start|>`) the
   Qwen3.8/Ornith vocabularies do not carry.
+
+`xing4-general.jinja` is a different animal and covers one script only
+(`venastine-xing4-29-a4b-5km.bat`). It is the template **embedded in the Xing4.0 GGUF,
+copied over verbatim**, with exactly one change: a `{%- set coding_instructions = … %}` line
+was added next to `default_system` and that constant is prepended to the system block. The
+instruction text is the same string `qwen-general.jinja` uses (the `xhigh` coding preamble), so
+both templates state one and the same level. Everything else — markers, tool format, thinking
+gate — is the model author's.
+
+- it is **not ChatML**: turns are `<_system>` / `<_user>` / `<_bot>` finished with `<_end>`,
+  tools arrive as JSON inside `<tools>`, calls render as
+  `<tool_call>{name}<param_key>k</param_key><param_value>v</param_value>…</tool_call>`, and tool
+  results come back as `<_observation>` + `<tool_response>`. `qwen-general.jinja` would render
+  garbage here, and vice versa;
+- it does not reference `reasoning_effort` **at all** — not even by accident — so the failure mode
+  documented above (a client sending `high` and getting a 500) cannot happen. `enable_thinking` is
+  the only lever, same as everywhere else: false renders a closed empty `<think></think>` in the
+  generation prompt, so the model skips thinking;
+- the default system prompt is a Chinese persona line for 中国电信星辰语义大模型 / "Xing", emitted
+  before our instruction and before any client-supplied system message;
+- **it drops `<think>` by itself.** For every assistant turn *before* the last user turn the
+  template emits a bare `</think>` regardless of `--reasoning-preserve`, so when a new user turn
+  arrives the previous assistant turn is rewritten and the prompt cache breaks from that point (the
+  tail, not the prefix — `-cram` still pays off). This is the model author's design, not a flag.
 
 **External paths hard-coded in every script** (not in this repo):
 

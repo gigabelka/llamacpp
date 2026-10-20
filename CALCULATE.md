@@ -159,8 +159,13 @@ n_seq_kv = 1                  при -kvu или -np 1
   считаем глобальные слои по `n_ctx`, локальные по `min(n_ctx, n_swa)`.
 - **Hybrid-SSM** (qwen35, Jamba, …): `L_attn = L/p`, рекуррентные слои KV
   **не имеют** — см. 2.3.
-- **MLA** (DeepSeek-V2/V3): вместо `d_kgqa+d_vgqa` берётся
-  `kv_lora_rank + dh_rope` на токен/слой.
+- **MLA** (DeepSeek-V2/V3): кэшируется не `d_kgqa+d_vgqa`, а сжатый латент.
+  Если GGUF публикует отдельные `attention.key_length` и `attention.value_length`
+  (так делает Xing4.0: 576 и 512 при `head_count_kv = 1`), они и есть
+  `d_kgqa` / `d_vgqa`, то есть `kv_per_tok_layer = key_length + value_length`
+  = 1088 элементов, а не `kv_lora_rank + dh_rope` = 576. Формула через
+  `kv_lora_rank + dh_rope` описывает только K-часть и **занижает кэш вдвое**;
+  когда `value_length` в GGUF нет, брать её.
 
 На карту `i`:
 ```

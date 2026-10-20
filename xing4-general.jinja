@@ -1,0 +1,121 @@
+{#- xing4-general.jinja -- chat template for Xing4.0-29B-A4B (arch xing4_0).        -#}
+{#- Base is the template embedded in the GGUF, copied over verbatim. The only      -#}
+{#- change is a constant coding instruction added to the system block.             -#}
+{#-                                                                                -#}
+{#- The effort level is hard-coded here and reasoning_effort is deliberately NOT   -#}
+{#- read: a client cannot substitute a level or kill the request with one. The only -#}
+{#- lever is enable_thinking (--reasoning on|off|auto), exactly as in              -#}
+{#- qwen-general.jinja.                                                           -#}
+{%- macro visible_text(content) -%}
+    {%- if content is string -%}
+        {{- content }}
+    {%- elif content is iterable and content is not mapping -%}
+        {%- for item in content -%}
+            {%- if item is mapping and item.type == 'text' -%}
+                {{- item.text }}
+            {%- elif item is string -%}
+                {{- item }}
+            {%- endif -%}
+        {%- endfor -%}
+    {%- else -%}
+        {{- content }}
+    {%- endif -%}
+{%- endmacro -%}
+{%- if messages[0]["role"] == "system" %}
+    {%- set system_message = messages[0]["content"] %}
+    {%- set loop_messages = messages[1:] %}
+{%- else %}
+    {%- set loop_messages = messages %}
+{%- endif %}
+{%- if not tools is defined %}
+    {%- set tools = [] %}
+{%- endif %}
+{%- set default_system = "你是中国电信星辰语义大模型，英文名是Xing，你是由中电信人工智能科技有限公司研发的人工智能助手。\n" %}
+{%- set coding_instructions = 'Reasoning effort is set to xhigh. Think the task through before answering: state the key assumptions and validate them, and weigh plausible alternatives instead of committing to the first one. When code is involved, trace execution step by step with concrete values rather than by intuition; derive types and signatures from the code actually given instead of guessing them; when a change touches more than one file, enumerate every call site and definition it affects; and enumerate edge cases explicitly, including empty input, a single element, boundary and overflow values, negative numbers, null or missing values, and concurrent access. Before answering, re-read your own conclusion and check it against the source for contradictions. Prioritize correctness, consistency, and clarity in the final answer.' %}
+{%- if system_message is defined %}
+    {{- "<_system>" + default_system + "\n" + coding_instructions + "\n\n" + visible_text(system_message)}}
+{%- else %}
+    {{- "<_system>" + default_system + "\n" + coding_instructions }}
+{%- endif %}
+{% if tools is iterable and tools | length > 0 %}
+
+# Tools
+
+You may call one or more functions to assist with the user query.
+
+You are provided with function signatures within <tools></tools> XML tags:
+<tools>
+{% for tool in tools %}
+{{ tool | tojson(ensure_ascii=False) }}
+{% endfor %}
+</tools>
+
+For each function call, output the function name and arguments within the following XML format:
+<tool_call>{function-name}<param_key>{param-key-1}</param_key><param_value>{param-value-1}</param_value><param_key>{param-key-2}</param_key><param_value>{param-value-2}</param_value>...</tool_call>
+{%- endif %}
+
+
+{%- set ns = namespace(last_user_index=-1) %}
+{%- for m in loop_messages %}
+    {%- if m.role == 'user' %}
+        {%- set ns.last_user_index = loop.index0 -%}
+    {%- endif %}
+{%- endfor %}
+{%- for m in loop_messages %}
+{%- if m.role == 'user' -%}<_user>{{ visible_text(m.content) }}
+{%- elif m.role == 'assistant' or m.role == 'bot' -%}
+<_bot>
+{%- set reasoning_content = '' %}
+{%- set content = visible_text(m.content) %}
+{%- if m.reasoning_content is string %}
+{%- set reasoning_content = m.reasoning_content %}
+{%- elif m.reasoning is string %}
+{%- set reasoning_content = m.reasoning %}
+{%- else %}
+{%- if '</think>' in content %}
+{%- set reasoning_content = content.split('</think>')[0].rstrip('\n').split('<think>')[-1].lstrip('\n') %}
+{%- set content = content.split('</think>')[-1].lstrip('\n') %}
+{%- endif %}
+{%- endif %}
+{%- if loop.index0 < ns.last_user_index -%}
+{{ '</think>' }}
+{%- elif enable_thinking is not defined or enable_thinking -%}
+{{ '<think>\n' + reasoning_content.strip() +  '\n</think>'}}
+{%- else -%}
+{{ '</think>' }}
+{%- endif -%}
+{%- if content.strip() -%}
+{{ content.strip() }}
+{%- endif -%}
+{% if m.tool_calls %}
+{%- for tc in m.tool_calls %}
+{%- if tc.function %}
+{%- set tc = tc.function %}
+{%- endif %}
+{{- '<tool_call>' + tc.name -}}
+{% set _args = tc.arguments %}
+{%- for k, v in _args.items() %}<param_key>{{ k }}</param_key><param_value>{{ v | tojson(ensure_ascii=False) if v is not string else v }}</param_value>{% endfor %}{{ '</tool_call>' }}{% endfor %}{% endif %}{{- '<_end>\n' }}
+{%- elif m.role == 'tool' -%}
+{%- if loop.index0 > 0 -%}
+{%- set prev_element = loop_messages[loop.index0 - 1] -%}
+{%- if prev_element.role != "tool" -%}
+{{- '<_observation>' -}}
+{%- endif -%}
+{%- endif -%}
+{%- if m.content is string -%}
+{{- '<tool_response>' -}}
+{{- m.content }}
+{{- '</tool_response>' -}}
+{%- else -%}
+{% for tr in m.content %}  
+{{- '<tool_response>' -}}{{ tr.output if tr.output is defined else tr }}{{- '</tool_response>' -}}
+{% endfor -%}
+{% endif -%}
+{%- elif m.role == 'system' -%}
+<_system>{{ visible_text(m.content) }}
+{%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+    <_bot>{{- '</think>' if (enable_thinking is defined and not enable_thinking) else '<think>\n' -}}
+{%- endif -%}
+
