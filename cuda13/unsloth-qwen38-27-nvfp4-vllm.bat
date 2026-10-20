@@ -18,9 +18,11 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --host 0.0.0.0 ^
   --port 1234 ^
   --tensor-parallel-size 2 ^
-  --max-model-len 122880 ^
-  --max-num-seqs 4 ^
-  --gpu-memory-utilization 0.90 ^
+  --max-model-len 139264 ^
+  --max-num-seqs 1 ^
+  --max-num-batched-tokens 1024 ^
+  --cudagraph-capture-sizes 1 2 4 ^
+  --gpu-memory-utilization 0.905 ^
   --kv-cache-dtype fp8 ^
   --cpu-offload-gb 0 ^
   --chat-template /mnt/c/MyProjecs/llamacpp/chat_template.jinja ^
@@ -29,6 +31,5 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --enable-auto-tool-choice ^
   --speculative-config.method mtp ^
   --speculative-config.num_speculative_tokens 2 ^
-  --limit-mm-per-prompt.image 0 ^
-  --limit-mm-per-prompt.video 0
+  --language-model-only
 pause

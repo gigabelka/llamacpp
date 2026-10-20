@@ -538,27 +538,69 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 - nothing can quietly land on the CPU: vLLM has no `-ngl` equivalent, `--cpu-offload-gb 0` is
   spelled out, and `--swap-space` no longer exists in 0.30 (V1 preempts by recompute, so there is
   no CPU KV swap at all). The log says `device_config=cuda` and that is the only placement;
-- **measured, cards free, `--max-model-len 122880 -tp 2`, fp8 KV, MTP n=2:** weights
-  **10.82 GiB/card**, available KV **2.41 GiB/card**, `GPU KV cache size: 127,022 tokens,
-  Maximum concurrency for 122,880 tokens per request: 1.03x`, `nvidia-smi` **15 675 / 15 793
-  MiB** of 16 311, nothing on CPU, **41–48 t/s** generation on a short code prompt
-  (392 completion tokens of which 253 were reasoning). `init engine` took 145 s cold
-  (44 s of torch.compile) and 48 s once the compile and flashinfer caches are warm — the
-  first start after any change to the launch flags is the slow one;
-- at 131072 it refuses to start: `2.44 GiB KV cache is needed, which is larger than the
-  available KV cache memory (2.34 GiB) … estimated maximum model length is 124800`. 122880
-  (30 × 4096) is the largest round value under that, which is why the script carries it;
-- **262144 is out of reach and no combination of flags gets there.** KV costs ~20 KiB/token/card
-  (the 16 attention layers are padded to 19 — `Add 3 padding layers, may waste at most 6.25% KV
-  cache memory` — which is +18.75 % over the naive figure), so 262144 would need ~5.0 GiB/card
-  against the 2.36 GiB left after weights and graphs. Dropping MTP buys ~0.7 GiB,
-  `--enforce-eager` ~0.7 GiB, `--gpu-memory-utilization 0.93` ~0.5 GiB — about 220k all together,
-  and only by giving up both speculation and CUDA graphs. 122880 is the measured ceiling at full
-  speed;
-- if it fails to start: `--gpu-memory-utilization` down (each card already has ~1.4 GiB taken by
-  WSL GPU-PV and the desktop, so 0.92 already fails with `Free memory on device cuda:0
-  (14.51/15.9 GiB) … less than desired`) → `--max-model-len` down → drop the two
-  `--speculative-config.*` lines → `--max-num-seqs 2` → `--enforce-eager` last.
+- **measured 2026-10-20, cards free, the flags now in the script** (`--max-model-len 139264
+  --max-num-seqs 1 --max-num-batched-tokens 1024 --cudagraph-capture-sizes 1 2 4
+  --gpu-memory-utilization 0.905 --language-model-only`, fp8 KV, MTP n=2): available KV
+  **2.67 GiB/card**, `GPU KV cache size: 142,049 tokens, Maximum concurrency for 139,264 tokens
+  per request: 1.02x`, `nvidia-smi` **15 721 / 15 833 MiB** of 16 311 under load, nothing on CPU,
+  **~42 t/s** generation (2 605 tokens, of which 2 379 reasoning, in 62 s) with
+  `Draft acceptance rate: 72–79 %` across runs, and prefill **~1 600 t/s** (94 067-token prompt in 61 s).
+  A 134 016-token prompt runs fine and peaks the pool at `GPU KV cache usage: 89.4%`.
+  The previous setting was 122880 at `--max-num-seqs 4 --gpu-memory-utilization 0.90` with the
+  two `--limit-mm-per-prompt` flags: available KV 2.41 GiB, 127 022 tokens, 41–48 t/s — i.e. the
+  change buys +16 384 tokens of context and costs nothing measurable in speed.
+  `init engine` takes ~145 s cold (44 s of torch.compile) and ~50 s once the compile and
+  flashinfer caches are warm — the first start after any change to the launch flags is the slow one;
+- **how that ceiling was found** (probe = start with `--max-model-len 262144` and read either
+  `GPU KV cache size` or `… estimated maximum model length is N`; all runs on free cards):
+
+  | flags | available KV/card | estimated max len |
+  | --- | --- | --- |
+  | the old config | 2.34 GiB | 124 800 |
+  | `--language-model-only --skip-mm-profiling --max-num-seqs 1 --cudagraph-capture-sizes 1 2 4` | 2.52 GiB | 134 400 |
+  | + `--max-num-batched-tokens 1024 --gpu-memory-utilization 0.905` | **2.67 GiB** | **142 400** |
+  | + `--mamba-ssm-cache-dtype bfloat16` | 2.67 GiB, need 4.57 → 4.42 GiB | ~158 000 (derived, not probed on this path) |
+
+  `--skip-mm-profiling` turned out to be redundant once `--language-model-only` is passed (same
+  2.67 GiB with and without), so the script does not carry it. `--prefix-cache-retention-interval 0`
+  is the **default** (`config/cache.py:148`) — passing it changes nothing. `--max-num-batched-tokens
+  512` buys only 1 600 tokens over 1024 and halves the prefill chunk again, so 1024 it is.
+  `--max-num-seqs 1` costs nothing real: concurrency was already 1.03x at 122880;
+- **two traps that look like free memory and are not.**
+  `VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0` (the log suggests it) raises the *reported*
+  available KV to 3.43 GiB and the estimate to 190 400, but the pool then does not fit: the
+  allocation of 3.22 GiB dies with `CUDA out of memory … 2.35 GiB is free`. The accounting is
+  right and the estimate is the mirage. `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` adds
+  ~0.14 GiB on paper and breaks startup inside WSL with
+  `RuntimeError: CUDA driver error: device not ready` while allocating the KV buffer;
+- **262144 is still out of reach at full speed.** It needs 4.57 GiB/card of KV against the
+  2.67 GiB that is actually available, and the startup log spells out why there is no slack left:
+  `Free memory on device (14.51/15.9 GiB)` — WSL GPU-PV and the desktop eat ~1.4 GiB before vLLM
+  starts — of which 10.99 GiB is weights + non-torch and 0.66 GiB is peak activation. The same
+  log suggests `--kv-cache-memory=2903107584` (2.7 GiB) as the "fully utilize" figure, which is
+  *below* the 2.74 GiB the current setting already uses, so pinning it would lose context, not
+  gain it. Dropping MTP (~0.7 GiB) and `--enforce-eager` (~0.7 GiB, graph capture actually
+  measured at 0.00 GiB here, so this one is smaller than it looks) remain the only big levers,
+  and both were ruled out on purpose;
+- the KV-quant route is **closed by choice**: fp8 is calibrated in the checkpoint
+  (`kv_cache_scheme`), while this build also accepts `nvfp4` / `nvfp4_4over6` (FlashInfer
+  supports them, `v1/attention/backends/flashinfer.py:411-422`) at ~0.56× the size — enough for
+  262144 — plus `fp8_per_token_head`, `int8/int4_per_token_head` and the TurboQuant set on a
+  separate Triton backend. NVFP4 KV has no published long-context accuracy data and open bugs on
+  exactly this hardware (vLLM #43562: crash on the first request on SM120, workaround fp8;
+  #61225: incoherent output on 0.30.0 with the token-major layout; split-KV corruption when a
+  short query attends a long cached prefix). Do not switch without a needle-in-a-haystack run.
+  On the weight side there is nothing left either: MLP is NVFP4 W4A4, attention / `linear_attn` /
+  `lm_head` / layers 56–63 MLP are FP8 W8A8, and the only bf16 masses (the 27-block ViT and the
+  810 MB MTP head) are in the quantizer's `ignore` list — the ViT is removed instead, see below;
+- `--mamba-ssm-cache-dtype bfloat16` is the one untaken lever: the GDN state is `float32`
+  (`mamba_ssm_dtype` in `config.json`, 48 v-heads × 128 × 128 ≈ 3 MiB per layer per sequence) and
+  bf16 drops the per-request need from 4.57 to 4.42 GiB, worth about +10 000 tokens. Left off
+  until someone A/Bs output quality — NVIDIA's Nemotron 3 paper reports accuracy loss from
+  quantizing the mamba cache;
+- if it fails to start: `--gpu-memory-utilization` down (0.905 is near the ceiling — 0.95 fails
+  immediately with `Free memory on device cuda:0 (14.51/15.9 GiB) … less than desired`) →
+  `--max-model-len` down → drop the two `--speculative-config.*` lines → `--enforce-eager` last.
   `--attention-backend TRITON_ATTN` sidesteps the flashinfer JIT entirely if it ever breaks again;
 - **the OpenAI field is `reasoning`, not `reasoning_content`** in vLLM 0.30, and
   `usage.completion_tokens_details.reasoning_tokens` counts it. Do not conclude the reasoning
@@ -573,13 +615,17 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   built to remove. It also carries only the plain `xhigh` instruction, not this repo's
   code-oriented preamble. `--default-chat-template-kwargs` is the lever if a fixed effort level
   is ever wanted (`vllm/entrypoints/launchers/cli_args.py:174`);
-- vision is off (`--limit-mm-per-prompt.image 0` / `.video 0`, logged as
-  `All limits of multimodal modalities supported by the model are set to 0, running in text-only
-  mode`) even though the ViT weights load regardless;
+- vision is off through `--language-model-only`, which is the same as setting every
+  `--limit-mm-per-prompt` to 0 but also keeps the ViT out of memory profiling; the two
+  `--limit-mm-per-prompt.*` flags it replaced left the ViT weights loaded anyway;
 - sampling is **not** passed on the command line: the model's `generation_config.json` already
   carries the card's thinking-mode set (`temperature 1.0`, `top_p 0.95`, `top_k 20`) and vLLM uses
   it as the server default. The guide says the same — `vllm serve` sets no samplers;
-- two harmless warnings worth not re-diagnosing: the KV padding note above, and `Speculative
+- two harmless warnings worth not re-diagnosing. `Add 3 padding layers, may waste at most 6.25%
+  KV cache memory`: the hybrid allocator sizes its groups by the smallest bucket — 17 layers
+  (16 full-attention + the MTP one) — and pads the 48 GDN layers up to 51, so the 6.25 % is
+  `3/48` of the **mamba state**, not an 18.75 % surcharge on the KV cache as an earlier note here
+  claimed (`v1/core/kv_cache_utils.py:1538-1560`). And `Speculative
   decoding (method=mtp) is enabled but no KV cache group could be identified as the draft
   model's`. The flashinfer autotuner also logs `OOM detected, falling back to default tactic`
   while probing tactics for `fp4_gemm` — that is by design;
