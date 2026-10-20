@@ -27,6 +27,17 @@ All scripts live in `cuda13/` and point at the CUDA 13.x build
 configs against a CUDA 12.x build) has been removed — `README.md` still describes
 it, so trust this file and the actual tree instead.
 
+**Two exceptions to everything below.** First, the bench now has **two** RTX 5060 Ti,
+not three: `nvidia-smi` and `Win32_VideoController` list `01:00.0` and `03:00.0` only.
+Every three-card config here (`qwen-qwen38-27-6k.bat`, `ornith-ornith15-35-8k.bat`,
+`davidau-qwen38-27-turbo-6k.bat`, `venastine-xing4-29-a4b-5km.bat`) therefore passes a
+three-field `-ts` the hardware no longer matches, and every three-card measurement in
+this file and in `CALCULATE.md` describes a machine that is gone. Nothing has been
+retuned for two cards yet. Second, `cuda13/unsloth-qwen38-27-nvfp4-vllm.bat` is **not** a
+llama.cpp script at all — it runs vLLM inside WSL2 against a safetensors model, so the
+knob table below (`-c`, `-ts`, `-ctk`/`-ctv`, `-b`/`-ub`, `-ngl`) does not apply to it,
+and neither does anything in `CALCULATE.md`. See its own entry under “Per-model notes”.
+
 Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 
 | script                             | model (GGUF)                              | GPUs  | `-c`   | `-ts`    | `-ctk`/`-ctv` | `-b`/`-ub` |
@@ -473,14 +484,127 @@ with `xing4` in it lands, the script below runs unchanged:
   last. Do **not** reach for `-ctv q4_0`: besides this repo's findings about the `q8_0`/`q4_0`
   pair, ports of this architecture report that quantised KV is silently ignored on it.
 
+`unsloth-qwen38-27-nvfp4-vllm.bat` is the one script here that does **not** run llama.cpp.
+It serves `unsloth/Qwen3.8-27B-NVFP4` — safetensors, not GGUF — through **vLLM 0.30.0 inside
+WSL2**, so `-c` / `-ts` / `-ctk` / `-ub` / `-ngl` and all of `CALCULATE.md` are irrelevant to it.
+Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
+
+- the quant is `compressed-tensors` **mixed-precision**: MLP in NVFP4 (W4A4, group 16),
+  attention + `lm_head` in FP8 W8A8, a static FP8 `kv_cache_scheme`, ViT left in bf16. NVFP4
+  needs Blackwell, which these cards are. On sm120 vLLM picked real cutlass paths, not
+  fallbacks: `FlashInferCutlassNvFp4LinearKernel`, `CutlassFP8ScaledMMLinearKernel`,
+  `FLASHINFER` attention (`arch=sm120`, `kv_cache_dtype=torch.float8_e4m3fn`, decode via `xqa`)
+  and `FlashInfer GDN prefill kernel` for the DeltaNet layers;
+- geometry is the Qwen3.8-27B one: 64 blocks, `full_attention_interval 4` → 16 attention and
+  48 Gated-DeltaNet layers, `n_head_kv 4`, `head_dim 256`, native context 262144. The MTP head
+  ships as a separate `model_mtp.safetensors` (bf16, 810 MB) but is listed in
+  `model.safetensors.index.json`, so `--speculative-config.method mtp` finds it with no `-md`
+  equivalent. `num_speculative_tokens 2` is the guide's own value and matches what this repo
+  settled on for llama.cpp;
+- **everything lives inside the WSL distro `Unsloth-Engines-6133eb79`** (Ubuntu 24.04), set up by
+  Unsloth Desktop. There is no Python, pip, nvcc or docker on the Windows side at all. vLLM is at
+  `/opt/unsloth/engines/vllm/env-<hash>/bin/vllm` (the `<hash>` is install-specific — list the
+  directory, do not assume it), and the model sits in that distro's own HF cache
+  (`HF_HOME=/opt/unsloth/hf`) on ext4 as well as in `C:\Users\viktor\.cache\huggingface`. Prefer
+  the in-distro copy: `/mnt/c` goes through drvfs and is far slower for 21 GB;
+- **the four environment variables are the whole trick.** Without them the server dies two to
+  three minutes in, *after* loading the weights, with a different error each time — this cost four
+  runs to work out, so do not strip them:
+  - `CUDA_HOME=<env>/cuda` — flashinfer JIT-compiles the prefill kernel and
+    `flashinfer/jit/cpp_ext.py:get_cuda_path()` reads this var; the bundled toolkit (nvcc 13.0.88,
+    headers, libcudart, nvvm/libdevice) is complete. Otherwise
+    `RuntimeError: Could not find nvcc and default cuda_home='/usr/local/cuda' doesn't exist`;
+  - `PATH=<env>/bin:<env>/cuda/bin:…` — `ninja` is in the venv's `bin`, and because vllm is
+    invoked by absolute path the venv PATH is never activated. Otherwise
+    `FileNotFoundError: 'ninja'`;
+  - `LIBRARY_PATH=/usr/lib/wsl/lib` — all ten nvcc compiles succeed and only the final link fails
+    with `/usr/bin/ld: cannot find -lcuda`. `libcuda.so` is the driver library; in WSL it is in
+    `/usr/lib/wsl/lib/` (both `.so` and `.so.1` are there) but `ldconfig` registers only
+    `libcuda.so.1` and that directory is in no linker search path. No symlink needed;
+  - `MAX_JOBS=4` — ninja otherwise runs all 11 nvcc jobs at once, and *both* TP workers do it
+    simultaneously: 22 `cicc` processes at ~2 GB each. That OOM-killed a worker
+    (`died unexpectedly (exit code: -9)`) and wedged the whole WSL VM into swap. flashinfer
+    honours `MAX_JOBS` and passes it to ninja as `-j`. Related: `C:\Users\viktor\.wslconfig` was
+    created with `memory=48GB` / `swap=16GB`, because WSL defaults to half of host RAM (30 GB)
+    and the log then read `Available RAM: 24.28 GiB` against a 21.81 GiB checkpoint;
+- **`--host 0.0.0.0`, never `127.0.0.1`.** WSL2 is behind NAT and its localhost forwarding only
+  reaches a listener bound to all interfaces. This is the one place the script must differ from
+  every llama.cpp script here;
+- `CUDA_DEVICE_ORDER` / `CUDA_VISIBLE_DEVICES` go **inside the `env` block**, not through `set` as
+  in the llama.cpp scripts: the process runs in Linux and never sees Windows variables;
+- `-tp 2` is forced, not chosen: tensor parallelism must divide `num_key_value_heads = 4`, so a
+  third card would be useless (3 does not divide 4) — it would take a fourth card, or pipeline
+  parallelism;
+- nothing can quietly land on the CPU: vLLM has no `-ngl` equivalent, `--cpu-offload-gb 0` is
+  spelled out, and `--swap-space` no longer exists in 0.30 (V1 preempts by recompute, so there is
+  no CPU KV swap at all). The log says `device_config=cuda` and that is the only placement;
+- **measured, cards free, `--max-model-len 122880 -tp 2`, fp8 KV, MTP n=2:** weights
+  **10.82 GiB/card**, available KV **2.41 GiB/card**, `GPU KV cache size: 127,022 tokens,
+  Maximum concurrency for 122,880 tokens per request: 1.03x`, `nvidia-smi` **15 675 / 15 793
+  MiB** of 16 311, nothing on CPU, **41–48 t/s** generation on a short code prompt
+  (392 completion tokens of which 253 were reasoning). `init engine` took 145 s cold
+  (44 s of torch.compile) and 48 s once the compile and flashinfer caches are warm — the
+  first start after any change to the launch flags is the slow one;
+- at 131072 it refuses to start: `2.44 GiB KV cache is needed, which is larger than the
+  available KV cache memory (2.34 GiB) … estimated maximum model length is 124800`. 122880
+  (30 × 4096) is the largest round value under that, which is why the script carries it;
+- **262144 is out of reach and no combination of flags gets there.** KV costs ~20 KiB/token/card
+  (the 16 attention layers are padded to 19 — `Add 3 padding layers, may waste at most 6.25% KV
+  cache memory` — which is +18.75 % over the naive figure), so 262144 would need ~5.0 GiB/card
+  against the 2.36 GiB left after weights and graphs. Dropping MTP buys ~0.7 GiB,
+  `--enforce-eager` ~0.7 GiB, `--gpu-memory-utilization 0.93` ~0.5 GiB — about 220k all together,
+  and only by giving up both speculation and CUDA graphs. 122880 is the measured ceiling at full
+  speed;
+- if it fails to start: `--gpu-memory-utilization` down (each card already has ~1.4 GiB taken by
+  WSL GPU-PV and the desktop, so 0.92 already fails with `Free memory on device cuda:0
+  (14.51/15.9 GiB) … less than desired`) → `--max-model-len` down → drop the two
+  `--speculative-config.*` lines → `--max-num-seqs 2` → `--enforce-eager` last.
+  `--attention-backend TRITON_ATTN` sidesteps the flashinfer JIT entirely if it ever breaks again;
+- **the OpenAI field is `reasoning`, not `reasoning_content`** in vLLM 0.30, and
+  `usage.completion_tokens_details.reasoning_tokens` counts it. Do not conclude the reasoning
+  parser is broken from an empty `reasoning_content`;
+- thinking is on, so a short `max_tokens` is spent entirely inside `<think>` and the reply comes
+  back with **both** `reasoning` and `content` empty at `finish_reason: length`. 1200 tokens was
+  not enough for a one-line Rust question; budget four figures at minimum;
+- **this script uses `chat_template.jinja` in the repo root, not `qwen-general.jinja`** — see
+  "Chat templates". That is a deliberate choice and it has a cost: the model's own template
+  *does* read `reasoning_effort` and raises on anything outside `xhigh`/`medium`/`low`, so a
+  client sending `max`, `minimal` or `none` gets a 500 — the exact trap `qwen-general.jinja` was
+  built to remove. It also carries only the plain `xhigh` instruction, not this repo's
+  code-oriented preamble. `--default-chat-template-kwargs` is the lever if a fixed effort level
+  is ever wanted (`vllm/entrypoints/launchers/cli_args.py:174`);
+- vision is off (`--limit-mm-per-prompt.image 0` / `.video 0`, logged as
+  `All limits of multimodal modalities supported by the model are set to 0, running in text-only
+  mode`) even though the ViT weights load regardless;
+- sampling is **not** passed on the command line: the model's `generation_config.json` already
+  carries the card's thinking-mode set (`temperature 1.0`, `top_p 0.95`, `top_k 20`) and vLLM uses
+  it as the server default. The guide says the same — `vllm serve` sets no samplers;
+- two harmless warnings worth not re-diagnosing: the KV padding note above, and `Speculative
+  decoding (method=mtp) is enabled but no KV cache group could be identified as the draft
+  model's`. The flashinfer autotuner also logs `OOM detected, falling back to default tactic`
+  while probing tactics for `fp4_gemm` — that is by design;
+- only one server at a time, as with the llama.cpp scripts: it binds the same port 1234 and wants
+  both cards. Orphaned TP workers hold ~11 GiB each after a crash —
+  `wsl -d Unsloth-Engines-6133eb79 -- pkill -9 -f vllm`; `pkill -f 'vllm serve'` alone is not
+  always enough.
+
 ## Chat templates
 
 | file                  | used by                                        |
 | --------------------- | ---------------------------------------------- |
-| `qwen-general.jinja`  | every script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
+| `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
+| `chat_template.jinja` | only `unsloth-qwen38-27-nvfp4-vllm.bat` (the vLLM one) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
 
-There are now **two** templates. `qwen-general.jinja` serves every script but one.
+There are now **three** templates. `qwen-general.jinja` serves every llama.cpp script but one.
+`chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the
+NVFP4 snapshot (byte-identical to it) and is passed only by `unsloth-qwen38-27-nvfp4-vllm.bat`,
+on purpose: that script serves the safetensors model through vLLM. Unlike `qwen-general.jinja`
+it reads `reasoning_effort` (default `xhigh`, `high` is mapped to `xhigh`) and raises on
+anything else, so a client sending `max`, `minimal` or `none` gets a 500 — the failure mode
+the merge into `qwen-general.jinja` was meant to remove. It also lacks this repo’s
+code-oriented preamble. Keep the two files in sync only where it matters; they are not
+interchangeable by design.
 `xing4-general.jinja` serves only `venastine-xing4-29-a4b-5km.bat`, because that model
 speaks a different protocol altogether — see the end of this section. `agentworld-35.jinja`
 (an unpatched older base for a different family, referenced by no script) was
