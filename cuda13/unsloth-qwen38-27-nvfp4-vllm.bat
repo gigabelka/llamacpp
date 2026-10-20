@@ -15,7 +15,7 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   /opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/bin/vllm serve ^
   unsloth/Qwen3.8-27B-NVFP4 ^
   --served-model-name Qwen3.8-27B-NVFP4 ^
-  --host 0.0.0.0 ^
+  --host 127.0.0.1 ^
   --port 1234 ^
   --tensor-parallel-size 2 ^
   --max-model-len 139264 ^
