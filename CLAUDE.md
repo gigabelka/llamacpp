@@ -33,10 +33,11 @@ Every three-card config here (`qwen-qwen38-27-6k.bat`, `ornith-ornith15-35-8k.ba
 `davidau-qwen38-27-turbo-6k.bat`, `venastine-xing4-29-a4b-5km.bat`) therefore passes a
 three-field `-ts` the hardware no longer matches, and every three-card measurement in
 this file and in `CALCULATE.md` describes a machine that is gone. Nothing has been
-retuned for two cards yet. Second, `cuda13/unsloth-qwen38-27-nvfp4-vllm.bat` is **not** a
-llama.cpp script at all — it runs vLLM inside WSL2 against a safetensors model, so the
-knob table below (`-c`, `-ts`, `-ctk`/`-ctv`, `-b`/`-ub`, `-ngl`) does not apply to it,
-and neither does anything in `CALCULATE.md`. See its own entry under “Per-model notes”.
+retuned for two cards yet. Second, the vLLM scripts (`cuda13/unsloth-qwen38-27-nvfp4-vllm*.bat`
+and `cuda13/gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`) are **not** llama.cpp scripts at all —
+they run vLLM inside WSL2 against a safetensors model, so the
+knob table below (`-c`, `-ts`, `-ctk`/`-ctv`, `-b`/`-ub`, `-ngl`) does not apply to them,
+and neither does anything in `CALCULATE.md`. See their own entries under “Per-model notes”.
 
 Scripts differ by model file, card count, and the VRAM-sensitive knobs:
 
@@ -618,6 +619,46 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `-batched-tokens 4096` (Triton prefill is not chunk-bound), `0.95` (WSL ceiling ≈ 0.9125),
   `expandable_segments` (breaks WSL), `preserve_thinking` (`chat_template.jinja:119` already treats it as
   on). The one move that would close the gap is that checkpoint (≈18.8 GB download, quality unmeasured).
+- **`gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` = that checkpoint, with the reference's own recipe.** It
+  serves `gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090` **pinned to `--revision
+  0cc27958cefbbe231782ec8511de8c4eb5233348`** (3 shards, 18.8 GB, in the distro's HF cache at
+  `/opt/unsloth/hf`, downloaded with the venv's `hf download`). The pin is the point: the default branch
+  (`5b7a687…`, also sitting in the Windows HF cache) is a later build with the MTP head **removed**
+  (`mtp_num_hidden_layers 0`, no `mtp.*` tensors) — MTP cannot start on it and decode falls to ~42 t/s.
+  `0cc2795` has `mtp_num_hidden_layers 1` and 15 `mtp.*` keys in the index. Relative to
+  `unsloth-…-rtx5060.bat`: fp8 KV (`--kv-cache-dtype fp8`) with the auto-selected FlashInfer backend
+  instead of int4 + `TRITON_ATTN`, `--max-num-seqs 2`, `--max-num-batched-tokens 4096`,
+  `cudagraph_mode=PIECEWISE`, `--mamba-cache-dtype bfloat16 --mamba-ssm-cache-dtype bfloat16`,
+  `--no-enable-flashinfer-autotune`, MTP `n=4`, `VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE=67108864`,
+  `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1`, `--trust-remote-code`, `--default-chat-template-kwargs
+  {"preserve_thinking":true}`, and no `--chat-template` (the revision's own template; not checked
+  byte-for-byte in the log). Kept: the four WSL variables, `--host 127.0.0.1`, `--language-model-only`,
+  `--gpu-memory-utilization 0.905` (the reference runs 0.94 headless; WSL ceiling ≈ 0.9125),
+  `--override-generation-config` with the card's sampler set, served names `Qwen3.8-27B-NVFP4` / `Llamacpp`.
+  The reference's `nvfp4` KV needs its vLLM `0.32.0rc1.dev100`; this distro has 0.30.0 where that dtype is
+  gated off on SM120, so fp8 it is.
+  **Measured 2026-10-21, cards free, first start, no tuning needed:** `Available KV cache memory 4.89 GiB`
+  per card, `GPU KV cache size: 283,722 tokens, Maximum concurrency for 262,144 tokens per request: 1.08x`
+  (the budget I expected to be borderline fits outright; weights + non-torch 8.87 GiB, peak activation
+  0.63 GiB, CUDAGraph 0.0 GiB), `nvidia-smi` **15 625 / 15 606 MiB** of 16 311 after the runs below, nothing on
+  CPU, 0 errors in the log, `init engine` 87.6 s (38.8 s compilation) with the weights already in the distro.
+  Prefill by wall clock (`max_tokens 1`): **2 955 t/s** at 33k tokens, **1 755 t/s** at 111k — against
+  476 t/s at 120k on the int4/Triton script. Needle at depth 50 %: found at 133k tokens (85.8 s) and at
+  **250k tokens (253 s, thinking on)**. Decode (default sampler `temp 1.0`, thinking on, 1 000 and 4 000
+  tokens, wall clock including a ~70-token prefill): **52.6 and 48.8 t/s**; MTP over 17 ten-second log
+  windows: mean acceptance length 2.96, draft acceptance 49 % (windows ranged 31–69 %, per-position
+  ~0.65 / 0.45 / 0.35 / 0.25). That is **the same decode speed as the int4 script (44–54 t/s), not the
+  reference's 78 t/s**: the reference's figure is greedy, and at `temp 1.0` the 3rd and 4th draft
+  positions rarely hit, which is the same effect the `n=4` row above shows for the unsloth checkpoint. What
+  this script buys over the int4 one is prefill (3.7×) and a full 262144 window at fp8; what it does not
+  buy is decode. Single runs, not an A/B; `n=3` was not tried here.
+  Warnings in the log, none fatal: `Using KV cache scaling factor 1.0 for fp8_e4m3` and `uncalibrated
+  q_scale` (the checkpoint ships no fp8 KV scales — the needle passes show retrieval works, not that
+  accuracy equals bf16), `Qwen3.5 model specifies mamba_ssm_dtype='float32' … Using the user-specified
+  value` (our bf16 override; quality unmeasured, as above), `max_num_scheduled_tokens is set to 4096 based
+  on the speculative decoding settings`, `Fused multi-step draft decode is not supported by … FLASHINFER`.
+  If it ever fails to fit: `--max-num-batched-tokens` 4096 → 2048 → 1024, then `--max-num-seqs 1`, then
+  `--max-model-len` down to the `estimated maximum model length` the log prints.
 - (older, written for the 139264 profile) **262144 was out of reach at full speed.** It needs 4.57 GiB/card of KV against the
   2.67 GiB that is actually available, and the startup log spells out why there is no slack left:
   `Free memory on device (14.51/15.9 GiB)` — WSL GPU-PV and the desktop eat ~1.4 GiB before vLLM
@@ -691,8 +732,9 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template.jinja` | only `unsloth-qwen38-27-nvfp4-vllm.bat` (the vLLM one) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
+| the model's own `chat_template.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` (no `--chat-template` flag; loaded from the pinned revision, ≠ the repo-root file) |
 
-There are now **three** templates. `qwen-general.jinja` serves every llama.cpp script but one.
+There are now **three** templates in this repo (the gittensor script passes none and uses the one shipped with its revision, which like `chat_template.jinja` raises on an unknown `reasoning_effort`). `qwen-general.jinja` serves every llama.cpp script but one.
 `chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the
 NVFP4 snapshot (byte-identical to it) and is passed only by `unsloth-qwen38-27-nvfp4-vllm.bat`,
 on purpose: that script serves the safetensors model through vLLM. Unlike `qwen-general.jinja`
