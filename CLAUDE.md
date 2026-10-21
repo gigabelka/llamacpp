@@ -660,6 +660,27 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   on the speculative decoding settings`, `Fused multi-step draft decode is not supported by … FLASHINFER`.
   If it ever fails to fit: `--max-num-batched-tokens` 4096 → 2048 → 1024, then `--max-num-seqs 1`, then
   `--max-model-len` down to the `estimated maximum model length` the log prints.
+- **`ukisai-swift15-qwen38-27-nvfp4-vllm.bat` = the long-context unsloth script on the Swift 1.5 checkpoint.**
+  Serves `ukisai/Swift-1.5-Qwen3.8-27b-NVFP4` pinned to `--revision 25482027debd5485e8108897ba9fed8d3ba16595`
+  (5 shards, 21.9 GB — the same weight mass as the unsloth checkpoint; the snapshot was copied from the Windows HF cache into
+  the distro's `/opt/unsloth/hf/hub`, the script runs with `HF_HUB_OFFLINE=1`). Same geometry as Qwen3.8-27B and an MTP head in the
+  index (15 `mtp.*` keys), so the flags are the base script's, with `--dtype bfloat16` from the model card added. Differences from
+  the unsloth checkpoint that matter: the quant is **ModelOpt `MIXED_PRECISION`** (NVFP4 + FP8), not `compressed-tensors`, and it
+  declares **no KV-cache scheme and no KV scales** (`kv_cache_quant_algo: null`) — the card warns that fp8/nvfp4 KV without calibrated
+  scales runs on unit scales, so int4 per-token-head (dynamic scales) + `TRITON_ATTN` stays and fp8 is not an option. The template is
+  the repo-root `chat_template.jinja` (maps `high` → `xhigh`); the model's own is the stock one that raises on `high`. The card itself
+  says full NVFP4 generation from this export was not independently tested.
+  **First start died in `profile_run`** with `Engine core initialization failed … Failed core proc(s): {}` (the real error is ~700
+  lines above that): for ModelOpt FP8 layers vLLM selects `FlashInferFP8ScaledMMLinearKernel` (the unsloth `compressed-tensors`
+  checkpoint gets `CutlassFP8ScaledMMLinearKernel`), whose flashinfer JIT `gemm` module links `-lcublas -lcublasLt`, and the venv has
+  only `nvidia/cu13/lib/libcublas.so.13` with no unversioned `.so` → `/usr/bin/ld: cannot find -lcublas`. The script therefore sets
+  `VLLM_DISABLED_KERNELS=FlashInferFP8ScaledMMLinearKernel` (comma-separated class names, read in `kernels/linear/__init__.py`),
+  which falls back to Cutlass. The alternative — symlinking `libcublas.so`/`libcublasLt.so` into the venv's `cuda/lib64` — edits
+  the Unsloth-managed env and was not taken.
+  **Measured 2026-10-21, cards free, once:** `Available KV cache memory 3.66 GiB`, `GPU KV cache size: 369,623 tokens, Maximum
+  concurrency for 262,144 tokens per request: 1.41x` (vs ~301k on the unsloth checkpoint — `lm_head` here is NVFP4, not FP8),
+  `nvidia-smi` 14 849 / 14 830 MiB, one short code prompt: 265 tokens (200 reasoning) in ~5 s wall, MTP mean acceptance
+  length 2.90, valid code in `content`. One sample; prefill and long-context (needle) not measured.
 - (older, written for the 139264 profile) **262144 was out of reach at full speed.** It needs 4.57 GiB/card of KV against the
   2.67 GiB that is actually available, and the startup log spells out why there is no slack left:
   `Free memory on device (14.51/15.9 GiB)` — WSL GPU-PV and the desktop eat ~1.4 GiB before vLLM
@@ -731,7 +752,7 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | file                  | used by                                        |
 | --------------------- | ---------------------------------------------- |
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
-| `chat_template.jinja` | only `unsloth-qwen38-27-nvfp4-vllm.bat` (the vLLM one) |
+| `chat_template.jinja` | `unsloth-qwen38-27-nvfp4-vllm.bat`, `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat` and `ukisai-swift15-qwen38-27-nvfp4-vllm.bat` (the vLLM ones) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template-gittensor.jinja` | only `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
 
