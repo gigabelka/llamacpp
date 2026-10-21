@@ -12,6 +12,7 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   PATH=/opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/bin:/opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ^
   LIBRARY_PATH=/usr/lib/wsl/lib ^
   MAX_JOBS=4 ^
+  NCCL_P2P_DISABLE=1 ^
   /opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/bin/vllm serve ^
   unsloth/Qwen3.8-27B-NVFP4 ^
   --served-model-name Qwen3.8-27B-NVFP4 Llamacpp ^
@@ -26,6 +27,7 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --kv-cache-dtype int4_per_token_head ^
   --attention-backend TRITON_ATTN ^
   --cpu-offload-gb 0 ^
+  --disable-custom-all-reduce ^
   --chat-template /mnt/c/MyProjecs/llamacpp/chat_template.jinja ^
   --reasoning-parser qwen3 ^
   --tool-call-parser qwen3_xml ^

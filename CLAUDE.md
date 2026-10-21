@@ -582,7 +582,8 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `needle 120000` 3/3, but **prefill only ~476 t/s** (119 940 tokens in 252 s). `n=3` costs ~15k
   pool tokens (316 194 at `n=2`) and lowers the acceptance rate (53 % against 61 % in the same
   kind of log) while still being faster in t/s.
-  `unsloth-qwen38-27-nvfp4-vllm-fast.bat` is the **interactive** one: fp8 KV, FlashInfer, 139264,
+  `unsloth-qwen38-27-nvfp4-vllm-fast.bat` (**no longer in the tree**: commit 993641e turned it into
+  `…-rtx5060.bat` with the long-context flags; the original is in f920e8f) was the **interactive** one: fp8 KV, FlashInfer, 139264,
   `-batched-tokens 1024`, `n=2` (`n=3` drops the estimated maximum to 139 200 and the start fails).
   Measured: pool 146 227, `needle 120000` 3/3 in 89 s — **~1 350 t/s prefill, 2.8× faster**.
   The chunk size is not the lever (1024 → 2048 → 4096 changed nothing on Triton): the backend is.
@@ -591,6 +592,32 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   nvfp4 KV on SM120 is closed by a **gate** (`is_device_capability_family(100)`,
   `flashinfer.py:496` / `interface.py:493`), not only by the bugs listed below. Async scheduling is
   already on with MTP and prefix caching is on; neither needs a flag. Dropping MTP is not a lever;
+- **`unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat` = the long-context script + two flags from
+  [skrodahl/qwen38-27B-dual-rtx5060](https://github.com/skrodahl/qwen38-27B-dual-rtx5060), and nothing
+  else of that recipe fits.** Added: `NCCL_P2P_DISABLE=1` and `--disable-custom-all-reduce`. In WSL2 the
+  P2P probe fails and custom all-reduce is already off (`custom_all_reduce.py:252` warns about exactly
+  that), so the flags only silence the warning — **not a speedup**. The reference's 3–4k t/s prefill and
+  78–125 t/s decode (greedy, k=4) come from another checkpoint
+  (`gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090 @ 0cc2795`: 18.8 GB, attention and `lm_head` in NVFP4
+  against FP8 here, MTP head only on that pinned commit), fp8 KV + FlashInfer, `-batched-tokens 4096`,
+  `--gpu-memory-utilization 0.95` on headless Linux. On the 21.8 GB unsloth checkpoint fp8 KV tops out
+  at ~150k, so 262144 means int4/Triton and the prefill is capped by the backend, not by flags.
+  Measured 2026-10-21 (cards free, greedy, 600 tokens, 3 runs per prompt; decode t/s, code / prose):
+
+  | variant | code | prose | notes |
+  | --- | --- | --- | --- |
+  | the script before this change | 50.8 | 40.0 | pool 304 087 tokens |
+  | **+ the two flags (in the script)** | 51.6 | 40.9 | inside noise |
+  | + `--no-enable-flashinfer-autotune` | 50.0 | 39.6 | flag works, nothing to gain |
+  | `n=4`, capture sizes `1 2 3 4 5` | 45.2 | 40.8 | pool 290 139; code **−11 %**, 4th-position acceptance 5–14 % |
+
+  A ~75k-token prompt: prefill 810–837 t/s (the 476 t/s above is the 120k prompt), decode only 20–24 t/s
+  at that depth. `needle 120000` was **not** re-run for this change. Left out on purpose:
+  `cudagraph_mode=PIECEWISE` (already `FULL_AND_PIECEWISE` here, the reference measured +2 % steps/s for
+  it), `--mamba-*-cache-dtype bfloat16` (capacity, not speed; the reference has no quality data either),
+  `-batched-tokens 4096` (Triton prefill is not chunk-bound), `0.95` (WSL ceiling ≈ 0.9125),
+  `expandable_segments` (breaks WSL), `preserve_thinking` (`chat_template.jinja:119` already treats it as
+  on). The one move that would close the gap is that checkpoint (≈18.8 GB download, quality unmeasured).
 - (older, written for the 139264 profile) **262144 was out of reach at full speed.** It needs 4.57 GiB/card of KV against the
   2.67 GiB that is actually available, and the startup log spells out why there is no slack left:
   `Free memory on device (14.51/15.9 GiB)` — WSL GPU-PV and the desktop eat ~1.4 GiB before vLLM
