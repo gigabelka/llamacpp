@@ -8,7 +8,9 @@ REM     before vLLM starts, 0.95 fails immediately.
 REM   --kv-cache-dtype fp8, not nvfp4: the recipe's nvfp4 numbers come from vLLM 0.32.0rc1.dev100,
 REM     this distro has 0.30.0 where nvfp4 KV is closed on SM120.
 REM   no PYTORCH_CUDA_ALLOC_CONF=expandable_segments (breaks startup inside WSL), no --load-format
-REM     ipc_cache / --api-key (Docker), no --chat-template (the revision carries its own template).
+REM     ipc_cache / --api-key (Docker).
+REM --chat-template chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
+REM   check patched: the stock one raises on "high"/"max" and Claude Code (high) got HTTP 400.
 REM The checkpoint is pinned to 0cc2795: later commits have no MTP head, decode falls to ~42 t/s.
 REM --mamba-ssm-cache-dtype bfloat16: neither the recipe nor this repo has quality data for it.
 
@@ -48,6 +50,7 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --reasoning-parser qwen3 ^
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
+  --chat-template /mnt/c/MyProjecs/llamacpp/chat_template-gittensor.jinja ^
   --default-chat-template-kwargs "{\"preserve_thinking\":true}" ^
   --speculative-config.method mtp ^
   --speculative-config.num_speculative_tokens 4 ^

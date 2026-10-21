@@ -631,8 +631,9 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `cudagraph_mode=PIECEWISE`, `--mamba-cache-dtype bfloat16 --mamba-ssm-cache-dtype bfloat16`,
   `--no-enable-flashinfer-autotune`, MTP `n=4`, `VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE=67108864`,
   `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1`, `--trust-remote-code`, `--default-chat-template-kwargs
-  {"preserve_thinking":true}`, and no `--chat-template` (the revision's own template; not checked
-  byte-for-byte in the log). Kept: the four WSL variables, `--host 127.0.0.1`, `--language-model-only`,
+  {"preserve_thinking":true}`, and `--chat-template chat_template-gittensor.jinja` (the revision's own
+  template with the effort check patched — the stock one returned HTTP 400 `Unexpected reasoning effort
+  high` to Claude Code; see "Chat templates"). Kept: the four WSL variables, `--host 127.0.0.1`, `--language-model-only`,
   `--gpu-memory-utilization 0.905` (the reference runs 0.94 headless; WSL ceiling ≈ 0.9125),
   `--override-generation-config` with the card's sampler set, served names `Qwen3.8-27B-NVFP4` / `Llamacpp`.
   The reference's `nvfp4` KV needs its vLLM `0.32.0rc1.dev100`; this distro has 0.30.0 where that dtype is
@@ -732,9 +733,9 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template.jinja` | only `unsloth-qwen38-27-nvfp4-vllm.bat` (the vLLM one) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
-| the model's own `chat_template.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` (no `--chat-template` flag; loaded from the pinned revision, ≠ the repo-root file) |
+| `chat_template-gittensor.jinja` | only `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
 
-There are now **three** templates in this repo (the gittensor script passes none and uses the one shipped with its revision, which like `chat_template.jinja` raises on an unknown `reasoning_effort`). `qwen-general.jinja` serves every llama.cpp script but one.
+There are now **four** templates in this repo. `chat_template-gittensor.jinja` is the template shipped with revision `0cc2795` copied verbatim, with one change: where the stock one raised on anything but `xhigh/medium/low` (so Claude Code's `reasoning_effort: "high"` via `/v1/messages` got HTTP 400, 2026-10-21), it now maps `high`/`max` → `xhigh`, `minimal` → `low`, unknown → `xhigh`. `qwen-general.jinja` serves every llama.cpp script but one.
 `chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the
 NVFP4 snapshot (byte-identical to it) and is passed only by `unsloth-qwen38-27-nvfp4-vllm.bat`,
 on purpose: that script serves the safetensors model through vLLM. Unlike `qwen-general.jinja`
