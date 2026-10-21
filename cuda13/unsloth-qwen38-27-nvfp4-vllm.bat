@@ -20,8 +20,8 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --tensor-parallel-size 2 ^
   --max-model-len 262144 ^
   --max-num-seqs 1 ^
-  --max-num-batched-tokens 1024 ^
-  --cudagraph-capture-sizes 1 2 4 ^
+  --max-num-batched-tokens 2048 ^
+  --cudagraph-capture-sizes 1 2 3 4 ^
   --gpu-memory-utilization 0.905 ^
   --kv-cache-dtype int4_per_token_head ^
   --attention-backend TRITON_ATTN ^
@@ -31,7 +31,7 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
   --speculative-config.method mtp ^
-  --speculative-config.num_speculative_tokens 2 ^
+  --speculative-config.num_speculative_tokens 3 ^
   --override-generation-config "{\"temperature\":1.0,\"top_p\":0.95,\"top_k\":20,\"min_p\":0.0,\"repetition_penalty\":1.0}" ^
   --language-model-only
 pause

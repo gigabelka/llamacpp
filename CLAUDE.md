@@ -573,7 +573,25 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   right and the estimate is the mirage. `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` adds
   ~0.14 GiB on paper and breaks startup inside WSL with
   `RuntimeError: CUDA driver error: device not ready` while allocating the KV buffer;
-- **262144 is still out of reach at full speed.** It needs 4.57 GiB/card of KV against the
+- **Two scripts since 2026-10-21, two incompatible optima.**
+  `unsloth-qwen38-27-nvfp4-vllm.bat` is the **long-context** one: `--kv-cache-dtype
+  int4_per_token_head --attention-backend TRITON_ATTN`, `--max-model-len 262144`,
+  `--max-num-batched-tokens 2048`, `--cudagraph-capture-sizes 1 2 3 4`, MTP `n=3`. int4 is declared
+  only by the Triton backend (`triton_attn.py`), 264 B/slot against 512 for fp8. Measured: pool
+  301 465 tokens at 262144, decode 44–54 t/s (9 `smoke` runs, mean 47 against 44 at `n=2`, noisy),
+  `needle 120000` 3/3, but **prefill only ~476 t/s** (119 940 tokens in 252 s). `n=3` costs ~15k
+  pool tokens (316 194 at `n=2`) and lowers the acceptance rate (53 % against 61 % in the same
+  kind of log) while still being faster in t/s.
+  `unsloth-qwen38-27-nvfp4-vllm-fast.bat` is the **interactive** one: fp8 KV, FlashInfer, 139264,
+  `-batched-tokens 1024`, `n=2` (`n=3` drops the estimated maximum to 139 200 and the start fails).
+  Measured: pool 146 227, `needle 120000` 3/3 in 89 s — **~1 350 t/s prefill, 2.8× faster**.
+  The chunk size is not the lever (1024 → 2048 → 4096 changed nothing on Triton): the backend is.
+  The log's `Avg prompt throughput` lies on long requests (the logger stays silent for minutes and
+  then books the whole prefill into one 10-second window) — time prefill by the wall clock.
+  nvfp4 KV on SM120 is closed by a **gate** (`is_device_capability_family(100)`,
+  `flashinfer.py:496` / `interface.py:493`), not only by the bugs listed below. Async scheduling is
+  already on with MTP and prefix caching is on; neither needs a flag. Dropping MTP is not a lever;
+- (older, written for the 139264 profile) **262144 was out of reach at full speed.** It needs 4.57 GiB/card of KV against the
   2.67 GiB that is actually available, and the startup log spells out why there is no slack left:
   `Free memory on device (14.51/15.9 GiB)` — WSL GPU-PV and the desktop eat ~1.4 GiB before vLLM
   starts — of which 10.99 GiB is weights + non-torch and 0.66 GiB is peak activation. The same
