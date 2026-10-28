@@ -654,9 +654,13 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
     `top_k 20`, `min_p 0.0`, `repetition_penalty 1.0` — with **`presence_penalty 0.0`, not the card's
     1.5**: in code the repeated tokens the penalty attacks (indentation, identifiers, boilerplate) are
     normal, and `0.7`/`0.80` already suppress looping. Do not "restore" 1.5 as documentation.
-    Note this is only a *default*: `/v1/messages` forwards a client's `temperature` / `top_p` / `top_k`
-    into the request (`entrypoints/anthropic/serving.py:477-491`), so Claude Code's own `temperature: 1.0`
-    overrides the 0.7. **Not measured** beyond the inherited figures.
+    Note this is only a *default*: `/v1/messages` does forward a client's `temperature` / `top_p` /
+    `top_k` (`entrypoints/anthropic/serving.py:477-491`) — but **Claude Code sends none of them**, so
+    this set is what the model actually runs on. (An earlier note here claimed Claude Code's own
+    `temperature: 1.0` overrides the 0.7; a session transcript shows `params` carrying only `model`,
+    `betas`, `max_tokens`, `thinking`, `context_management` and `output_config`, with zero occurrences
+    of `"temperature"`, `"top_p"` or `"top_k"` — Claude Code 2.1.312.) **Not measured** beyond the
+    inherited figures.
 - **`gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` = that checkpoint, with the reference's own recipe.** It
   serves `gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090` **pinned to `--revision
   0cc27958cefbbe231782ec8511de8c4eb5233348`** (3 shards, 18.8 GB, in the distro's HF cache at
@@ -722,8 +726,9 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
     `repetition_penalty 1.0` and **`presence_penalty 0.0`, not the card's 1.5**, exactly as on
     `unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` and for the same reason (in code the repeated tokens the
     penalty attacks are normal). The gittensor card gives no non-thinking sampler set of its own, only
-    `enable_thinking: false`. Note this is a *default*: `/v1/messages` forwards a client's `temperature` /
-    `top_p` / `top_k`, so Claude Code's own `temperature: 1.0` overrides the 0.7.
+    `enable_thinking: false`. Note this is a *default*: `/v1/messages` does forward a client's
+    `temperature` / `top_p` / `top_k` — but Claude Code sends none of them, so this set is what the
+    model actually runs on (see the `unsloth-…-no-reasoning.bat` entry for the transcript evidence).
 
   **Not measured** beyond the inherited figures. One thing worth a re-measure if it matters: MTP `n=4` was
   measured at `temp 1.0` (acceptance 49 %, per-position ~0.65 / 0.45 / 0.35 / 0.25), and `temp 0.7` should
@@ -753,9 +758,21 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
     had quality data for the bf16 override. Measured: `Available KV cache memory 4.83 GiB`, pool **266 488
     tokens, concurrency 1.02x**, `nvidia-smi` 15 587 / 15 568 MiB, decode unchanged (4 000 tokens at
     `temp 0.7`: 87.4 t/s). It spends the headroom, so `-batched-tokens` can no longer be raised.
-  `--override-generation-config` also drops to `temperature 0.3 / top_p 0.95` (code profile) from the
-  card's general non-thinking `0.7 / 0.80`; `presence_penalty 0.0` / `repetition_penalty 1.0` as before.
-  As on the other vLLM scripts this is only a *default* — `/v1/messages` forwards a client's samplers.
+  `--override-generation-config` keeps the base script's `temperature 0.7 / top_p 0.80`;
+  `presence_penalty 0.0` / `repetition_penalty 1.0` as before. It carried `0.3 / 0.95` (a "code
+  profile") until 2026-10-28 and that is **reverted — do not re-add it.** With `presence_penalty 0.0`
+  and `repetition_penalty 1.0` nothing breaks a repetition cycle, and on a long agentic task `0.3`
+  collapsed. Measured on the `c:\MyProjecs\la2-hf-headless-client-llm-testing` benchmark (build an L2
+  client from one prompt, subagents available): clean through gate 1, `tsc` clean and a first
+  `npm run dev`, then after a large hexdump tool result **seven consecutive replies of exactly 16 384
+  output tokens, `stop_reason max_tokens`, not one tool call**, `input_tokens` frozen at ~177 700 for
+  ~30 minutes, the text degenerating into endless `00000000`; two replies died with `response exceeded
+  the 16384 output token maximum`, and one earlier `Write` was cut mid-JSON. The same run drifted off
+  its instructions — English against a CLAUDE.md demanding Russian, and **zero** subagent calls
+  (25 hand-written `Write`s) — where the base script at `0.7 / 0.80` finished that task in ~1 h 20 min
+  with subagents. The perf half of this script (`FULL_AND_PIECEWISE`, mamba fp32) is not implicated
+  and stays. As on the other vLLM scripts the set is a *default*, but Claude Code sends no samplers,
+  so it is what the model runs on.
   `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` is dropped: `max_position_embeddings` is 262144, so it allowed nothing.
   **Final verification of the combined config:** `init engine` 66.6 s, needle at depth 50 % found at
   **120 504 tokens (73 s) and 248 304 tokens (247 s)**, i.e. prefill 1 651 and 1 005 t/s at those depths;
@@ -764,6 +781,7 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 
   | change | result |
   | --- | --- |
+  | `temperature 0.3 / top_p 0.95` | repetition collapse and instruction drift on a long agentic task (see the `--override-generation-config` paragraph above). `0.7 / 0.80` stays |
   | `--max-num-seqs 1` | greedy 66.9 / 69.4 / 69.0 t/s against 78.7 / 83.9 / 83.2 with 2. Worse |
   | `-batched-tokens 8192` | engine refuses to start: activations eat the pool, `estimated maximum model length is 256096` < 262144 |
   | MTP `n=3` | greedy mean 79.4 against 81.9 at `n=4`; 4 000 tokens 75.4 against 84.7. Pool +5 377 tokens, not needed |
@@ -1072,6 +1090,28 @@ vLLM-скрипты здесь служат `--max-model-len 262144`, а llama.c
 при переключении провайдера CC Switch переписывает блок `env` в `settings.json` целиком, так
 что правка самого `settings.json` не переживёт первое же переключение. Проверка — `/context`
 в новой сессии должен показывать `229.4k`, а не `200.0k`.
+
+**Проверять это перед каждым бенчмарком, а не один раз.** Прогон 2026-10-28 на
+`gittensor-…-no-reasoning-fast.bat` шёл с `max_tokens: 16384` во всех 52 запросах — то есть env
+провайдера был не тот, что здесь описан. Само по себе это не ломает сессию, но когда модель
+сваливается в цикл повторений, каждый ответ обрезается по лимиту, авто-резюм запускает его заново,
+и два ответа умирают с `Claude's response exceeded the 16384 output token maximum`. Транскрипт
+прогона лежит в
+`c:\Users\viktor\.claude\projects\c--MyProjecs-la2-hf-headless-client-llm-testing\*.jsonl`;
+фактический `max_tokens`, `stop_reason` и набор сэмплеров каждого запроса видны в записях
+`api-request` / `assistant`.
+
+**Claude Code не шлёт сэмплеров вообще.** В `params` запроса — только `model`, `betas`,
+`max_tokens`, `thinking`, `context_management`, `output_config` (версия 2.1.312, `querySource: sdk`).
+Значит `--override-generation-config` у vLLM-скриптов действует целиком, и ошибка в нём напрямую
+определяет поведение модели — см. запись `gittensor-…-no-reasoning-fast.bat` в «Per-model notes».
+
+**`thinking` клиента перебивает серверный `enable_thinking: false`.** Claude Code шлёт
+`thinking: {"type":"adaptive"}`, и в том же прогоне `…-no-reasoning-fast.bat` все 50 ответов модели
+содержали `thinking`-блоки, хотя сервер поднят с
+`--default-chat-template-kwargs "{\"enable_thinking\":false}"`. Это согласуется с «запрос побеждает
+мердж» из описания этих скриптов, но по исходникам vLLM 0.30 ещё не подтверждено — то есть
+«no-reasoning» под Claude Code рассуждения не выключает.
 
 ## Editing conventions
 

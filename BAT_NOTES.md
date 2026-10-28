@@ -60,7 +60,9 @@ No-reasoning variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat. Only two fla
   - which is why --reasoning-parser qwen3 stays. Side effect: the reasoning-effort block is skipped
   entirely, so neither the xhigh preamble nor an HTTP 400 on "high"/"max" is reachable here.
 presence_penalty 0.0, not the card's 1.5: in code the repeated tokens it attacks (indentation,
-  identifiers, boilerplate) are normal, and 0.7/0.80 already suppress looping. Not measured.
+  identifiers, boilerplate) are normal, and 0.7/0.80 already suppress looping - which the 2026-10-28
+  agentic run confirms by contrast: the -fast variant at temperature 0.3 looped, this one did not
+  (see the -fast section). The 1.5 itself is still untested.
 ```
 
 ## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-fast.bat
@@ -88,15 +90,34 @@ Tuned variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat. The co
    tokens per request: 1.02x", nvidia-smi 15587 / 15568 MiB, decode unchanged (4000 tokens at
    temp 0.7: 87.4 t/s). It eats the headroom, so --max-num-batched-tokens can NOT be raised any
    more (see below) and needle was re-run because of it: found at ~120k and ~245k tokens.
---override-generation-config: temperature 0.3 / top_p 0.95 instead of the card's general
-  non-thinking 0.7 / 0.80 - for code a low temperature is both more accurate and faster (MTP
-  acceptance was 78-90 % on code prompts here). This is only a DEFAULT: /v1/messages forwards a
-  client's temperature / top_p / top_k (entrypoints/anthropic/serving.py:477-491) and Claude Code
-  sends temperature 1.0, which overrides it. vLLM has no server-side clamp.
+--override-generation-config: temperature 0.7 / top_p 0.80 - the card's general non-thinking set,
+  identical to the base script. It was 0.3 / 0.95 until 2026-10-28 on the theory that for code a
+  low temperature is both more accurate and faster (MTP acceptance was 78-90 % on code prompts).
+  That is REVERTED and must not come back: with presence_penalty 0.0 and repetition_penalty 1.0
+  there is nothing to break a repetition cycle, and on a long agentic task 0.3 collapsed into
+  degenerate generation. Measured on the benchmark in c:\MyProjecs\la2-hf-headless-client-llm-testing
+  (generate an L2 client from one prompt; transcript
+  c:\Users\viktor\.claude\projects\c--MyProjecs-la2-hf-headless-client-llm-testing\b7c8eae1-5f52-4adc-ae3e-ede0e4434ddd.jsonl):
+  the run was clean through gate 1 (12/12), tsc clean and the first npm run dev, then after a large
+  hexdump tool result it emitted SEVEN consecutive replies of exactly 16384 output tokens with
+  stop_reason max_tokens and NOT ONE tool call, input_tokens frozen at ~177,700 for ~30 minutes,
+  the text degenerating into endless runs of "00000000"; two replies died with "response exceeded
+  the 16384 output token maximum" and one earlier Write was cut mid-JSON (InputValidationError).
+  Same run drifted off its instructions: answered in English against a CLAUDE.md that demands
+  Russian, and spawned no subagent at all (0 Agent/Task calls, 25 Writes by hand) where the base
+  script at 0.7 / 0.80 finished the same task in ~1 h 20 min with subagents. The perf half of this
+  script (FULL_AND_PIECEWISE, mamba fp32) is NOT implicated and stays.
+  Note the old claim here was wrong: /v1/messages does forward a client's temperature / top_p /
+  top_k (entrypoints/anthropic/serving.py:477-491), but Claude Code sends NONE of them - an
+  api-request in that transcript carries only model, betas, max_tokens, thinking,
+  context_management and output_config (0 occurrences of "temperature"/"top_p"/"top_k" in the whole
+  file, Claude Code 2.1.312). So --override-generation-config is what the model actually runs on.
 presence_penalty 0.0, not the card's 1.5: in code the repeated tokens it attacks (indentation,
   identifiers, boilerplate) are normal. repetition_penalty 1.0 as in the base script.
 
 Measured and REJECTED (do not re-add):
+  temperature 0.3 / top_p 0.95  repetition collapse and instruction drift on a long agentic task,
+                            see the --override-generation-config paragraph above. 0.7 / 0.80 stays.
   --max-num-seqs 1          decode 66.9-69.4 t/s greedy against 78.7-83.9 with 2. Worse.
   --max-num-batched-tokens 8192  engine refuses to start: activations eat the KV pool,
                             "estimated maximum model length is 256096" < 262144. 4096 stays.

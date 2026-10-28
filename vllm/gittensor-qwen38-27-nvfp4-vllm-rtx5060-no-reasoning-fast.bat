@@ -37,6 +37,6 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --default-chat-template-kwargs "{\"enable_thinking\":false}" ^
   --speculative-config.method mtp ^
   --speculative-config.num_speculative_tokens 4 ^
-  --override-generation-config "{\"temperature\":0.3,\"top_p\":0.95,\"top_k\":20,\"min_p\":0.0,\"presence_penalty\":0.0,\"repetition_penalty\":1.0}" ^
+  --override-generation-config "{\"temperature\":0.7,\"top_p\":0.8,\"top_k\":20,\"min_p\":0.0,\"presence_penalty\":0.0,\"repetition_penalty\":1.0}" ^
   --language-model-only
 pause
