@@ -14,6 +14,7 @@ plus two long-form design docs (in Russian):
   min KV quant), and a fully calibrated worked example for `Qwen3.8-27B` on
   RTX 5060 Ti 16 GB cards. Treat this as the authoritative reference when changing
   any `-c`, `-ts`, `-ub`, `-ctk`, or `-ctv` value.
+- `BAT_NOTES.md` — comments of the `.bat` scripts (the scripts themselves carry none), one section per script.
 - `*.jinja` — chat templates passed to the server via `--chat-template-file`.
 - `cuda13/*.bat` — the llama.cpp launch scripts.
 - `vllm/*.bat` — the vLLM launch scripts (vLLM inside WSL2, safetensors models).
@@ -1063,6 +1064,12 @@ vLLM `prompt is too long`.
 в новой сессии должен показывать `262.1k`, а не `200.0k`.
 
 ## Editing conventions
+
+- **No comments inside `.bat` files.** Never write `REM` or `::` in a launch script (new or existing).
+  Explanations of flags, reasons for decisions, measurements and "do not re-add" notes go to
+  `BAT_NOTES.md` under a `## <path to the script>` heading (e.g. `## vllm/foo.bat`), verbatim-style, in
+  English like the existing sections. Creating, copying, renaming or deleting a script means
+  creating, copying, renaming or deleting its section in the same change.
 
 - The model is a **hybrid Transformer + SSM**: only every 4th layer has a KV
   cache; SSM layers hold a fixed-size state that does not grow with context.

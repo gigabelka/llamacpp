@@ -1,31 +1,6 @@
 @echo off
 title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 @0cc2795 no-reasoning CODE (gittensor, MTP k=4, 2x16GB, WSL2)
 
-REM Recipe: https://github.com/skrodahl/qwen38-27B-dual-rtx5060 (fp8 KV + FlashInfer + MTP k=4).
-REM Differences from the recipe, on purpose:
-REM   --gpu-memory-utilization 0.905, not 0.94: under WSL GPU-PV and the desktop take ~1.4 GiB
-REM     before vLLM starts, 0.95 fails immediately.
-REM   --kv-cache-dtype fp8, not nvfp4: the recipe's nvfp4 numbers come from vLLM 0.32.0rc1.dev100,
-REM     this distro has 0.30.0 where nvfp4 KV is closed on SM120.
-REM   no PYTORCH_CUDA_ALLOC_CONF=expandable_segments (breaks startup inside WSL), no --load-format
-REM     ipc_cache / --api-key (Docker).
-REM --chat-template chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
-REM   check patched: the stock one raises on "high"/"max" and Claude Code (high) got HTTP 400.
-REM The checkpoint is pinned to 0cc2795: later commits have no MTP head, decode falls to ~42 t/s.
-REM --mamba-ssm-cache-dtype bfloat16: neither the recipe nor this repo has quality data for it.
-REM No-reasoning variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat. Only two flags differ, and
-REM   the KV/backend half is unchanged on purpose, so every measurement in CLAUDE.md for the base
-REM   script still applies (pool 283,722 tokens at 262144, prefill 2955 t/s at 33k / 1755 t/s at 111k).
-REM --default-chat-template-kwargs is the lever, not an edit to the template: the same merged dict
-REM   also feeds the reasoning parser, so with enable_thinking=false the template emits a closed empty
-REM   <think></think> (chat_template-gittensor.jinja:300) AND the parser starts in CONTENT state.
-REM   Without it the whole answer would land in "reasoning" with an empty "content". The request wins
-REM   the merge, so a client sending chat_template_kwargs {"enable_thinking": true} gets thinking back
-REM   - which is why --reasoning-parser qwen3 stays. Side effect: the reasoning-effort block is skipped
-REM   entirely, so neither the xhigh preamble nor an HTTP 400 on "high"/"max" is reachable here.
-REM presence_penalty 0.0, not the card's 1.5: in code the repeated tokens it attacks (indentation,
-REM   identifiers, boilerplate) are normal, and 0.7/0.80 already suppress looping. Not measured.
-
 cd /d "%~dp0.."
 
 wsl -d Unsloth-Engines-6133eb79 -- env ^

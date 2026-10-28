@@ -1,19 +1,6 @@
 @echo off
 title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 @0cc2795 (gittensor, MTP k=4, 2x16GB, WSL2)
 
-REM Recipe: https://github.com/skrodahl/qwen38-27B-dual-rtx5060 (fp8 KV + FlashInfer + MTP k=4).
-REM Differences from the recipe, on purpose:
-REM   --gpu-memory-utilization 0.905, not 0.94: under WSL GPU-PV and the desktop take ~1.4 GiB
-REM     before vLLM starts, 0.95 fails immediately.
-REM   --kv-cache-dtype fp8, not nvfp4: the recipe's nvfp4 numbers come from vLLM 0.32.0rc1.dev100,
-REM     this distro has 0.30.0 where nvfp4 KV is closed on SM120.
-REM   no PYTORCH_CUDA_ALLOC_CONF=expandable_segments (breaks startup inside WSL), no --load-format
-REM     ipc_cache / --api-key (Docker).
-REM --chat-template chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
-REM   check patched: the stock one raises on "high"/"max" and Claude Code (high) got HTTP 400.
-REM The checkpoint is pinned to 0cc2795: later commits have no MTP head, decode falls to ~42 t/s.
-REM --mamba-ssm-cache-dtype bfloat16: neither the recipe nor this repo has quality data for it.
-
 cd /d "%~dp0.."
 
 wsl -d Unsloth-Engines-6133eb79 -- env ^
