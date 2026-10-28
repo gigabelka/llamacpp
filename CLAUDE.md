@@ -724,6 +724,59 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   **Not measured** beyond the inherited figures. One thing worth a re-measure if it matters: MTP `n=4` was
   measured at `temp 1.0` (acceptance 49 %, per-position ~0.65 / 0.45 / 0.35 / 0.25), and `temp 0.7` should
   accept more drafts — expected, not observed.
+- **`gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-fast.bat` = that no-reasoning script with full
+  CUDA graphs and the mamba cache back at fp32, measured 2026-10-28 on free cards.** The context half is
+  untouched (pin `0cc2795`, `--kv-cache-dtype fp8`, auto-FlashInfer, `--max-model-len 262144`,
+  `--max-num-seqs 2`, `-batched-tokens 4096`, `--no-enable-flashinfer-autotune`, MTP `n=4`, `0.905`,
+  `enable_thinking:false`), so the pool still covers a full 262144-token request. Baseline for every number
+  below is the unmodified `…-no-reasoning.bat` measured in the same session — **note it decodes at ~75 t/s,
+  not the 48–53 t/s in the bullets above**: those were taken with thinking on, and on code prompts with
+  thinking off MTP acceptance runs 78–90 %. Two lines differ:
+  - **no `--compilation-config {"cudagraph_mode":"PIECEWISE"}`** → the default `FULL_AND_PIECEWISE`, which
+    the log confirms. `PIECEWISE` came from the reference recipe and threw away full-graph decode for
+    nothing: FlashInfer reports `UNIFORM_BATCH` on SM120 (xqa, `head_dim 256`, GQA 24/4 —
+    `flashinfer.py:977-1012`, `_is_xqa_head_dim_supported` at `:575`) and so do the GDN/mamba backends
+    (`gdn_attn.py:84`, `mamba_attn.py:93`), so the spec-decode downgrade in
+    `config/compilation.py:1453-1471` never fires and FULL graphs are captured at
+    `uniform_decode_query_len = n+1 = 5`. It matters because the log says `Fused multi-step draft decode is
+    not supported by … FLASHINFER; falling back to rebuilding attention metadata between draft steps` — 4
+    draft steps per token, so launch overhead is the thing full graphs cut. Measured, code prompt, 1 000
+    tokens, greedy: **83.9 / 83.2 t/s against 75.2 / 77.5**; 4 000 tokens at `temp 0.7`: **84.7 against
+    74.7**. Prefill unchanged (2 712 vs 2 752 t/s at 44.5k). Cost: 3 196 tokens of pool
+    (283 722 → 280 526) and ~45 s of startup;
+  - **no `--mamba-cache-dtype bfloat16 --mamba-ssm-cache-dtype bfloat16`** → back to the checkpoint's own
+    `mamba_ssm_dtype: float32`. This is the one accuracy lever that costs no context, and nothing anywhere
+    had quality data for the bf16 override. Measured: `Available KV cache memory 4.83 GiB`, pool **266 488
+    tokens, concurrency 1.02x**, `nvidia-smi` 15 587 / 15 568 MiB, decode unchanged (4 000 tokens at
+    `temp 0.7`: 87.4 t/s). It spends the headroom, so `-batched-tokens` can no longer be raised.
+  `--override-generation-config` also drops to `temperature 0.3 / top_p 0.95` (code profile) from the
+  card's general non-thinking `0.7 / 0.80`; `presence_penalty 0.0` / `repetition_penalty 1.0` as before.
+  As on the other vLLM scripts this is only a *default* — `/v1/messages` forwards a client's samplers.
+  `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1` is dropped: `max_position_embeddings` is 262144, so it allowed nothing.
+  **Final verification of the combined config:** `init engine` 66.6 s, needle at depth 50 % found at
+  **120 504 tokens (73 s) and 248 304 tokens (247 s)**, i.e. prefill 1 651 and 1 005 t/s at those depths;
+  one code request came back with `reasoning: null`, valid code in `content`, `finish_reason stop`.
+  **Measured and rejected — do not re-add:**
+
+  | change | result |
+  | --- | --- |
+  | `--max-num-seqs 1` | greedy 66.9 / 69.4 / 69.0 t/s against 78.7 / 83.9 / 83.2 with 2. Worse |
+  | `-batched-tokens 8192` | engine refuses to start: activations eat the pool, `estimated maximum model length is 256096` < 262144 |
+  | MTP `n=3` | greedy mean 79.4 against 81.9 at `n=4`; 4 000 tokens 75.4 against 84.7. Pool +5 377 tokens, not needed |
+  | flashinfer autotune on | within noise (greedy 82.9–84.9 vs 83.2–83.9) for +80 s of startup (`init engine` 146.9 s vs 65.1 s) |
+
+  **Closed by the build or the checkpoint, not worth re-opening.** fp8 KV here runs on **unit scales**:
+  `kv_cache_scheme` is static fp8 but the checkpoint ships no `k_scale`/`v_scale`, hence the log's
+  `Using KV cache scaling factor 1.0` and `uncalibrated q_scale`. There is no `--calculate-kv-scales` in
+  vLLM 0.30.0 (not a single occurrence in the package), `fp8_per_token_head` (dynamic scales) is declared
+  only by `TRITON_ATTN` (`triton_attn.py`; FlashInfer's list is
+  `auto/float16/bfloat16/fp8/fp8_e4m3/fp8_e5m2/nvfp4/nvfp4_4over6`, `flashinfer.py:414-423`) and Triton
+  costs 3.7× of prefill, and bf16 KV halves the pool to ~142k, i.e. it breaks 262144. On the weight side
+  this checkpoint has attention **and `lm_head`** in NVFP4 (`lm_head.weight_scale_2` in the index;
+  `quantization_config.ignore` covers only `embed_tokens`, the `linear_attn` `conv1d`/`in_proj_*`,
+  `model.visual*` and `mtp*`), so weight precision is a property of the checkpoint — only a different one
+  (unsloth / ukisai: FP8 attention + `lm_head`) would change it, and those need int4 KV at 262144.
+  For maximum accuracy use the thinking script instead (`gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`).
 - **`ukisai-swift15-qwen38-27-nvfp4-vllm.bat` = the long-context unsloth script on the Swift 1.5 checkpoint.**
   Serves `ukisai/Swift-1.5-Qwen3.8-27b-NVFP4` pinned to `--revision 25482027debd5485e8108897ba9fed8d3ba16595`
   (5 shards, 21.9 GB — the same weight mass as the unsloth checkpoint; the snapshot was copied from the Windows HF cache into
@@ -818,7 +871,7 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template.jinja` | `unsloth-qwen38-27-nvfp4-vllm.bat`, `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat`, `unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` and `ukisai-swift15-qwen38-27-nvfp4-vllm.bat` (the vLLM ones) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
-| `chat_template-gittensor.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` and `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
+| `chat_template-gittensor.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat` and `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-fast.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
 
 There are now **four** templates in this repo. `chat_template-gittensor.jinja` is the template shipped with revision `0cc2795` copied verbatim, with one change: where the stock one raised on anything but `xhigh/medium/low` (so Claude Code's `reasoning_effort: "high"` via `/v1/messages` got HTTP 400, 2026-10-21), it now maps `high`/`max` → `xhigh`, `minimal` → `low`, unknown → `xhigh`. `qwen-general.jinja` serves every llama.cpp script but one.
 `chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the
