@@ -34,7 +34,7 @@ Every three-card config here (`qwen-qwen38-27-6k.bat`, `ornith-ornith15-35-8k.ba
 three-field `-ts` the hardware no longer matches, and every three-card measurement in
 this file and in `CALCULATE.md` describes a machine that is gone. Nothing has been
 retuned for two cards yet. Second, the vLLM scripts (`cuda13/unsloth-qwen38-27-nvfp4-vllm*.bat`
-and `cuda13/gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`) are **not** llama.cpp scripts at all —
+and `cuda13/gittensor-qwen38-27-nvfp4-vllm-rtx5060*.bat`) are **not** llama.cpp scripts at all —
 they run vLLM inside WSL2 against a safetensors model, so the
 knob table below (`-c`, `-ts`, `-ctk`/`-ctv`, `-b`/`-ub`, `-ngl`) does not apply to them,
 and neither does anything in `CALCULATE.md`. See their own entries under “Per-model notes”.
@@ -625,7 +625,10 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   config still thought at `temp 1.0`. Fixed 2026-10-28. The KV/backend half is **unchanged on purpose**
   (`int4_per_token_head` + `TRITON_ATTN`, `--max-model-len 262144`, `-batched-tokens 2048`, capture sizes
   `1 2 3 4`, `0.905`, MTP `n=3`), so every number in the two bullets above still applies: pool ~301k
-  tokens, decode 44–54 t/s, prefill ~476 t/s at 120k. Two lines differ:
+  tokens, decode 44–54 t/s, prefill ~476 t/s at 120k. There are **two** no-reasoning scripts now, and
+  this is the slow-prefill one: `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat` serves the same
+  262144 at fp8 + FlashInfer and prefills 3.7× faster, so prefer it unless the unsloth checkpoint itself is
+  the point. Two lines differ:
   - `--default-chat-template-kwargs "{\"enable_thinking\":false}"` is the whole lever, and it has to be
     this flag rather than an edit to the template, because the **same merged dict feeds the parser**.
     `chat_template.jinja:178-181` emits a closed empty `<think>\n\n</think>` in the generation prompt, so
@@ -691,6 +694,36 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   on the speculative decoding settings`, `Fused multi-step draft decode is not supported by … FLASHINFER`.
   If it ever fails to fit: `--max-num-batched-tokens` 4096 → 2048 → 1024, then `--max-num-seqs 1`, then
   `--max-model-len` down to the `estimated maximum model length` the log prints.
+- **`gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat` = the gittensor script with thinking off and
+  non-thinking samplers.** This is the **fast-prefill** no-reasoning config, against the long-context one
+  (`unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat`, int4 + `TRITON_ATTN`, ~476 t/s at 120k): both serve the
+  full 262144, but fp8 KV + FlashInfer on this checkpoint prefill 3.7× faster, and with thinking off the
+  output is short, so latency is prefill, not decode — decode is the same 44–54 t/s on either. The
+  KV/backend half is **unchanged on purpose** (pin `--revision 0cc2795…`, `--kv-cache-dtype fp8`,
+  auto-FlashInfer, `--max-num-seqs 2`, `-batched-tokens 4096`, `cudagraph_mode PIECEWISE`, `--mamba-*-cache-dtype
+  bfloat16`, `--no-enable-flashinfer-autotune`, MTP `n=4`, `0.905`), so every number in the bullet above
+  applies: KV 4.89 GiB/card, pool 283 722 tokens, prefill 2 955 t/s at 33k / 1 755 t/s at 111k, decode
+  48–53 t/s, `init engine` 87.6 s. Two lines differ:
+  - `--default-chat-template-kwargs "{\"enable_thinking\":false}"` in place of `{"preserve_thinking":true}`
+    (which is the template's own default anyway, `chat_template-gittensor.jinja:17`, and has nothing to act
+    on with thinking off). The mechanism is the one documented for the unsloth no-reasoning script: the
+    template sets `state.thinking = enable_thinking` (`:24`), skips the whole reasoning-effort block (`:104`)
+    and emits a closed empty `<think>\n\n</think>` in the generation prompt (`:300`), while the **same merged
+    dict** reaches `--reasoning-parser qwen3`, so the parser starts in `CONTENT` state instead of putting the
+    whole answer into `reasoning` with an empty `content`. The request wins the merge, so a client sending
+    `chat_template_kwargs: {"enable_thinking": true}` gets thinking back — which is why the parser stays.
+    Side effect: the patched `reasoning_effort` normalisation never runs here, so neither the `xhigh`
+    preamble nor the stock template's HTTP 400 on `high`/`max` is reachable on this script;
+  - `--override-generation-config` carries `temperature 0.7`, `top_p 0.80`, `top_k 20`, `min_p 0.0`,
+    `repetition_penalty 1.0` and **`presence_penalty 0.0`, not the card's 1.5**, exactly as on
+    `unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` and for the same reason (in code the repeated tokens the
+    penalty attacks are normal). The gittensor card gives no non-thinking sampler set of its own, only
+    `enable_thinking: false`. Note this is a *default*: `/v1/messages` forwards a client's `temperature` /
+    `top_p` / `top_k`, so Claude Code's own `temperature: 1.0` overrides the 0.7.
+
+  **Not measured** beyond the inherited figures. One thing worth a re-measure if it matters: MTP `n=4` was
+  measured at `temp 1.0` (acceptance 49 %, per-position ~0.65 / 0.45 / 0.35 / 0.25), and `temp 0.7` should
+  accept more drafts — expected, not observed.
 - **`ukisai-swift15-qwen38-27-nvfp4-vllm.bat` = the long-context unsloth script on the Swift 1.5 checkpoint.**
   Serves `ukisai/Swift-1.5-Qwen3.8-27b-NVFP4` pinned to `--revision 25482027debd5485e8108897ba9fed8d3ba16595`
   (5 shards, 21.9 GB — the same weight mass as the unsloth checkpoint; the snapshot was copied from the Windows HF cache into
@@ -785,7 +818,7 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template.jinja` | `unsloth-qwen38-27-nvfp4-vllm.bat`, `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat`, `unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` and `ukisai-swift15-qwen38-27-nvfp4-vllm.bat` (the vLLM ones) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
-| `chat_template-gittensor.jinja` | only `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
+| `chat_template-gittensor.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` and `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
 
 There are now **four** templates in this repo. `chat_template-gittensor.jinja` is the template shipped with revision `0cc2795` copied verbatim, with one change: where the stock one raised on anything but `xhigh/medium/low` (so Claude Code's `reasoning_effort: "high"` via `/v1/messages` got HTTP 400, 2026-10-21), it now maps `high`/`max` → `xhigh`, `minimal` → `low`, unknown → `xhigh`. `qwen-general.jinja` serves every llama.cpp script but one.
 `chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the
