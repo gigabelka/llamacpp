@@ -1,5 +1,5 @@
 @echo off
-title vLLM Server - Qwen3.8-27B NVFP4 (Unsloth, 2x16GB, WSL2)
+title vLLM Server - Qwen3.8-27B NVFP4 no-reasoning CODE (Unsloth, 2x16GB, WSL2)
 
 cd /d "%~dp0.."
 
@@ -32,6 +32,7 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --enable-auto-tool-choice ^
   --speculative-config.method mtp ^
   --speculative-config.num_speculative_tokens 3 ^
-  --override-generation-config "{\"temperature\":1.0,\"top_p\":0.95,\"top_k\":20,\"min_p\":0.0,\"repetition_penalty\":1.0}" ^
+  --default-chat-template-kwargs "{\"enable_thinking\":false}" ^
+  --override-generation-config "{\"temperature\":0.7,\"top_p\":0.8,\"top_k\":20,\"min_p\":0.0,\"presence_penalty\":0.0,\"repetition_penalty\":1.0}" ^
   --language-model-only
 pause

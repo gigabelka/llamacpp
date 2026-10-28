@@ -619,6 +619,37 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `-batched-tokens 4096` (Triton prefill is not chunk-bound), `0.95` (WSL ceiling ≈ 0.9125),
   `expandable_segments` (breaks WSL), `preserve_thinking` (`chat_template.jinja:119` already treats it as
   on). The one move that would close the gap is that checkpoint (≈18.8 GB download, quality unmeasured).
+- **`unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` = the long-context script with thinking off and the
+  card's non-thinking samplers.** It was a byte copy of `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat` minus
+  `NCCL_P2P_DISABLE=1` / `--disable-custom-all-reduce` — i.e. the name promised no reasoning while the
+  config still thought at `temp 1.0`. Fixed 2026-10-28. The KV/backend half is **unchanged on purpose**
+  (`int4_per_token_head` + `TRITON_ATTN`, `--max-model-len 262144`, `-batched-tokens 2048`, capture sizes
+  `1 2 3 4`, `0.905`, MTP `n=3`), so every number in the two bullets above still applies: pool ~301k
+  tokens, decode 44–54 t/s, prefill ~476 t/s at 120k. Two lines differ:
+  - `--default-chat-template-kwargs "{\"enable_thinking\":false}"` is the whole lever, and it has to be
+    this flag rather than an edit to the template, because the **same merged dict feeds the parser**.
+    `chat_template.jinja:178-181` emits a closed empty `<think>\n\n</think>` in the generation prompt, so
+    the model never thinks; `vllm/parser/qwen3.py:231-233` reads
+    `chat_template_kwargs["enable_thinking"]` and starts the engine in `ParserState.CONTENT` instead of
+    `REASONING` (and `extract_reasoning` returns `(None, output)` outright). Without it the parser would
+    still be waiting for a `</think>` that never comes and **the whole answer would land in `reasoning`
+    with an empty `content`**. The CLI default does reach the parser:
+    `chat_completion/serving.py:266` builds `_effective_chat_template_kwargs()`
+    (`renderers/params.py:111-141`, `merge_kwargs(defaults, request)`) and passes that same dict as
+    `reasoning_parser_kwargs` at `serving.py:378-380`; `AnthropicServingMessages`
+    (`entrypoints/anthropic/serving.py:98-133`) subclasses `OpenAIServingChat`, so `/v1/messages` behaves
+    identically. The request wins the merge, so a client sending
+    `chat_template_kwargs: {"enable_thinking": true}` gets thinking back — which is why
+    `--reasoning-parser qwen3` stays. Side effect: with the block at `chat_template.jinja:58-70` skipped,
+    the `xhigh` preamble is not injected **and** the `Unexpected reasoning effort` raise cannot fire, so
+    the 500 on `max`/`minimal` documented below is not reachable on this script;
+  - `--override-generation-config` carries the card's non-thinking set — `temperature 0.7`, `top_p 0.80`,
+    `top_k 20`, `min_p 0.0`, `repetition_penalty 1.0` — with **`presence_penalty 0.0`, not the card's
+    1.5**: in code the repeated tokens the penalty attacks (indentation, identifiers, boilerplate) are
+    normal, and `0.7`/`0.80` already suppress looping. Do not "restore" 1.5 as documentation.
+    Note this is only a *default*: `/v1/messages` forwards a client's `temperature` / `top_p` / `top_k`
+    into the request (`entrypoints/anthropic/serving.py:477-491`), so Claude Code's own `temperature: 1.0`
+    overrides the 0.7. **Not measured** beyond the inherited figures.
 - **`gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` = that checkpoint, with the reference's own recipe.** It
   serves `gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090` **pinned to `--revision
   0cc27958cefbbe231782ec8511de8c4eb5233348`** (3 shards, 18.8 GB, in the distro's HF cache at
@@ -752,19 +783,23 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | file                  | used by                                        |
 | --------------------- | ---------------------------------------------- |
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
-| `chat_template.jinja` | `unsloth-qwen38-27-nvfp4-vllm.bat`, `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat` and `ukisai-swift15-qwen38-27-nvfp4-vllm.bat` (the vLLM ones) |
+| `chat_template.jinja` | `unsloth-qwen38-27-nvfp4-vllm.bat`, `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat`, `unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` and `ukisai-swift15-qwen38-27-nvfp4-vllm.bat` (the vLLM ones) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template-gittensor.jinja` | only `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
 
 There are now **four** templates in this repo. `chat_template-gittensor.jinja` is the template shipped with revision `0cc2795` copied verbatim, with one change: where the stock one raised on anything but `xhigh/medium/low` (so Claude Code's `reasoning_effort: "high"` via `/v1/messages` got HTTP 400, 2026-10-21), it now maps `high`/`max` → `xhigh`, `minimal` → `low`, unknown → `xhigh`. `qwen-general.jinja` serves every llama.cpp script but one.
 `chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the
-NVFP4 snapshot (byte-identical to it) and is passed only by `unsloth-qwen38-27-nvfp4-vllm.bat`,
-on purpose: that script serves the safetensors model through vLLM. Unlike `qwen-general.jinja`
+NVFP4 snapshot (still byte-identical to it, re-checked 2026-10-28) and is passed by the vLLM
+scripts listed above, on purpose: they serve the safetensors model through vLLM. Unlike `qwen-general.jinja`
 it reads `reasoning_effort` (default `xhigh`, `high` is mapped to `xhigh`) and raises on
 anything else, so a client sending `max`, `minimal` or `none` gets a 500 — the failure mode
 the merge into `qwen-general.jinja` was meant to remove. It also lacks this repo’s
 code-oriented preamble. Keep the two files in sync only where it matters; they are not
-interchangeable by design.
+interchangeable by design. The one script where that 500 cannot happen is
+`unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat`: it passes
+`--default-chat-template-kwargs "{\"enable_thinking\":false}"`, which skips the whole
+`reasoning_effort` block (and the `xhigh` preamble with it) — see its entry under
+“Per-model notes”.
 `xing4-general.jinja` serves only `venastine-xing4-29-a4b-5km.bat`, because that model
 speaks a different protocol altogether — see the end of this section. `agentworld-35.jinja`
 (an unpatched older base for a different family, referenced by no script) was
