@@ -1039,6 +1039,26 @@ Two failure modes look like success and waste a lot of time:
   numbers then describe a different config than the script name says. Measure
   only with the cards free.
 
+### Claude Code как клиент этих серверов
+
+Claude Code не знает ID модели `Llamacpp` (его отдают `--served-model-name` у vLLM-скриптов)
+и для любого ID, не начинающегося с `claude-`, **молча подставляет окно 200k**, хотя все
+vLLM-скрипты здесь служат `--max-model-len 262144`, а llama.cpp-конфиги задают окно через `-c`
+и у большинства оно тоже 262144.
+Автокомпакт тогда срабатывает на ~184k, и четверть окна теряется без единого сообщения об
+ошибке. Лекарство — переменная окружения `CLAUDE_CODE_MAX_CONTEXT_TOKENS=262144` в среде,
+из которой запускается Claude Code (для нераспознанного ID без суффикса `[1m]` она действует
+сама по себе; см. `model-config#correct-the-window-for-a-gateway-or-custom-model-id`).
+Вместе с ней стоит задать `CLAUDE_CODE_MAX_OUTPUT_TOKENS=16384`: окно совпадает с
+`--max-model-len`, так что у самой границы контекста запрос без потолка на ответ получит от
+vLLM `prompt is too long`.
+
+Здесь переменные прописаны не в `~/.claude/settings.json`, а в env провайдеров `Llamacpp` и
+`Unsloth` в CC Switch (`c:\Users\viktor\.cc-switch\cc-switch.db`, таблица `providers`):
+при переключении провайдера CC Switch переписывает блок `env` в `settings.json` целиком, так
+что правка самого `settings.json` не переживёт первое же переключение. Проверка — `/context`
+в новой сессии должен показывать `262.1k`, а не `200.0k`.
+
 ## Editing conventions
 
 - The model is a **hybrid Transformer + SSM**: only every 4th layer has a KV
