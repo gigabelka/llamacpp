@@ -15,17 +15,20 @@ plus two long-form design docs (in Russian):
   RTX 5060 Ti 16 GB cards. Treat this as the authoritative reference when changing
   any `-c`, `-ts`, `-ub`, `-ctk`, or `-ctv` value.
 - `*.jinja` — chat templates passed to the server via `--chat-template-file`.
-- `cuda13/*.bat` — the launch scripts.
+- `cuda13/*.bat` — the llama.cpp launch scripts.
+- `vllm/*.bat` — the vLLM launch scripts (vLLM inside WSL2, safetensors models).
 
 There is no build, no test suite, no linter. "Running" the project means
 executing one of the `.bat` files (see below).
 
 ## Layout of the launch scripts
 
-All scripts live in `cuda13/` and point at the CUDA 13.x build
+All llama.cpp scripts live in `cuda13/` and point at the CUDA 13.x build
 (`c:\Llamacpp\cuda13\llama-server.exe`). An earlier `cuda12/` set (the same
 configs against a CUDA 12.x build) has been removed — `README.md` still describes
-it, so trust this file and the actual tree instead.
+it, so trust this file and the actual tree instead. The seven vLLM scripts live in
+`vllm/` instead; they still do `cd /d "%~dp0.."`, so the repo root stays their working
+directory and the `--chat-template` paths resolve unchanged.
 
 **Two exceptions to everything below.** First, the bench now has **two** RTX 5060 Ti,
 not three: `nvidia-smi` and `Win32_VideoController` list `01:00.0` and `03:00.0` only.
@@ -33,8 +36,8 @@ Every three-card config here (`qwen-qwen38-27-6k.bat`, `ornith-ornith15-35-8k.ba
 `davidau-qwen38-27-turbo-6k.bat`, `venastine-xing4-29-a4b-5km.bat`) therefore passes a
 three-field `-ts` the hardware no longer matches, and every three-card measurement in
 this file and in `CALCULATE.md` describes a machine that is gone. Nothing has been
-retuned for two cards yet. Second, the vLLM scripts (`cuda13/unsloth-qwen38-27-nvfp4-vllm*.bat`
-and `cuda13/gittensor-qwen38-27-nvfp4-vllm-rtx5060*.bat`) are **not** llama.cpp scripts at all —
+retuned for two cards yet. Second, the vLLM scripts (`vllm/unsloth-qwen38-27-nvfp4-vllm*.bat`
+and `vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060*.bat`, `vllm/ukisai-swift15-qwen38-27-nvfp4-vllm.bat`) are **not** llama.cpp scripts at all —
 they run vLLM inside WSL2 against a safetensors model, so the
 knob table below (`-c`, `-ts`, `-ctk`/`-ctv`, `-b`/`-ub`, `-ngl`) does not apply to them,
 and neither does anything in `CALCULATE.md`. See their own entries under “Per-model notes”.
