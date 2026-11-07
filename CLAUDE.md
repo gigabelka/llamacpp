@@ -766,6 +766,13 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `top_p` 0.9/0.95 costs acceptance and produced runaway replies; `top_k` is inert at `top_p 0.8`.
   **`min_p` ≠ 0 is rejected by vLLM 0.30 with MTP on** (HTTP 400 on every request) — never put it into
   `--override-generation-config` on these scripts.
+- **`gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat` (+ `.json` for the harness) = test2 with
+  thinking on**, so the harness picks the level: `--default-chat-template-kwargs
+  {"enable_thinking":true,"preserve_thinking":true}` and the card's thinking-mode samplers (`1.0 / 0.95 / 20 /
+  0.0 / 0.0 / 1.0`), not test2's 0.4 — low temperature loops inside `<think>`. The request's `reasoning_effort`
+  is normalised by `chat_template-gittensor.jinja:103-120`: `low`/`minimal` → brief, `medium` → no preamble,
+  `high`/`max`/unknown/absent → `xhigh`; `none` does **not** disable thinking. The `.json` declares
+  `reasoning: true`, `reasoningEfforts: ["low","medium","high"]`. **Not measured**; see `BAT_NOTES.md`.
 - **`ukisai-swift15-qwen38-27-nvfp4-vllm.bat` = the long-context unsloth script on the Swift 1.5 checkpoint.**
   Serves `ukisai/Swift-1.5-Qwen3.8-27b-NVFP4` pinned to `--revision 25482027debd5485e8108897ba9fed8d3ba16595`
   (5 shards, 21.9 GB — the same weight mass as the unsloth checkpoint; the snapshot was copied from the Windows HF cache into
@@ -860,7 +867,7 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template.jinja` | `unsloth-qwen38-27-nvfp4-vllm.bat`, `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat`, `unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` and `ukisai-swift15-qwen38-27-nvfp4-vllm.bat` (the vLLM ones) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
-| `chat_template-gittensor.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat` and `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
+| `chat_template-gittensor.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat` and `gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
 
 There are now **four** templates in this repo. `chat_template-gittensor.jinja` is the template shipped with revision `0cc2795` copied verbatim, with one change: where the stock one raised on anything but `xhigh/medium/low` (so Claude Code's `reasoning_effort: "high"` via `/v1/messages` got HTTP 400, 2026-10-21), it now maps `high`/`max` → `xhigh`, `minimal` → `low`, unknown → `xhigh`. `qwen-general.jinja` serves every llama.cpp script but one.
 `chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the

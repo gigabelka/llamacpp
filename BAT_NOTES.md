@@ -177,3 +177,32 @@ min_p is CLOSED by vLLM 0.30, not by measurement: any request with min_p != 0 is
 Not covered: a long multi-turn Claude Code session. The harness is single-turn plus one tool
   round; the sweep shows no regression there, not proof for hour-long agent loops.
 ```
+
+## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat
+
+```text
+Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat with thinking ON, so the
+  harness can pick the reasoning level. Paired with the .json of the same name (reasoning true,
+  reasoningEfforts ["low","medium","high"]). Every engine flag (PIECEWISE, fp32 mamba, fp8 KV,
+  MTP k=4, 262144, pool 269,385 tokens) is -test.bat's and documented there. Two lines differ:
+--default-chat-template-kwargs {"enable_thinking":true,"preserve_thinking":true}. Both are the
+  template's own defaults (chat_template-gittensor.jinja:16-17); spelled out so the intent is
+  visible. preserve_thinking keeps <think> in past assistant turns, so the prefix is not
+  rewritten and the prefix cache keeps hitting.
+  The level is the request's reasoning_effort, normalised by the patched block at
+  chat_template-gittensor.jinja:103-120:
+    xhigh (also high, max, unknown, absent)  -> "think carefully ... prioritize correctness" preamble
+    medium                                   -> no instruction (the model's native thinking)
+    low (also minimal)                       -> "keep your thinking brief" preamble
+  "none" does NOT turn thinking off - it is unknown and becomes xhigh. The only off switch is
+  chat_template_kwargs {"enable_thinking": false} in the request (the request wins the merge;
+  the parser follows the same dict). The preamble sits in the system block, so changing the
+  level between requests invalidates the prefix cache from position 0.
+--override-generation-config temperature 1.0 / top_p 0.95 / top_k 20 / min_p 0.0 /
+  presence_penalty 0.0 / repetition_penalty 1.0 - the card's thinking-mode set, as on the base
+  gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat. NOT test2's 0.4 / 0.8: that set was tuned with
+  thinking off, and lowering the temperature in thinking mode is what sends the model into
+  loops inside <think>. min_p stays 0.0 (vLLM 0.30 rejects min_p != 0 with MTP on).
+Not measured. MTP k=4 acceptance at temp 1.0 was ~49 % on the base script (bf16 mamba); expect
+  decode near its 48-53 t/s, below the ~75 t/s of the no-reasoning test scripts.
+```
