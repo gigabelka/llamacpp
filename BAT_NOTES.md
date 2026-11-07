@@ -60,88 +60,70 @@ No-reasoning variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat. Only two fla
   - which is why --reasoning-parser qwen3 stays. Side effect: the reasoning-effort block is skipped
   entirely, so neither the xhigh preamble nor an HTTP 400 on "high"/"max" is reachable here.
 presence_penalty 0.0, not the card's 1.5: in code the repeated tokens it attacks (indentation,
-  identifiers, boilerplate) are normal, and 0.7/0.80 already suppress looping - which the 2026-10-28
-  agentic run confirms by contrast: the -fast variant at temperature 0.3 looped, this one did not
-  (see the -fast section). The 1.5 itself is still untested.
+  identifiers, boilerplate) are normal. Measured 2026-11-07 against rep 1.05 / 1.10 and presence
+  0.5 / 1.5 (see the -test section): no penalty helped correctness, all of them cost MTP
+  acceptance, presence 1.5 was the worst. The 2026-10-28 -fast collapse that once argued for this
+  is now attributed to FULL CUDA graphs, not to the sampler (see the -test section).
 ```
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-fast.bat
+## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat
 
 ```text
-Tuned variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat. The context half is
-  untouched on purpose (--max-model-len 262144, fp8 KV, FlashInfer, --revision 0cc2795, k=4), so
-  the pool still covers a full 262144-token request. Two lines differ from the base script, both
-  measured 2026-10-28 on free cards (--host 0.0.0.0 was used for the bench only, not here).
-
-1) NO --compilation-config: the base script forces cudagraph_mode=PIECEWISE (from the reference
-   recipe), which throws away full-graph decode for nothing. FlashInfer reports UNIFORM_BATCH on
-   SM120 (xqa, head_dim 256, GQA 24/4) and so do the GDN/mamba backends, so the default
-   FULL_AND_PIECEWISE survives the spec-decode check and captures FULL graphs at
-   uniform_decode_query_len = k+1 = 5. That matters here because the log says "Fused multi-step
-   draft decode is not supported by FLASHINFER; falling back to rebuilding attention metadata
-   between draft steps" - 4 draft steps per token, so per-launch overhead is what full graphs cut.
-   Measured (code prompt, 1000 tokens, greedy): 83.9 / 83.2 t/s against 75.2 / 77.5 on PIECEWISE;
-   4000 tokens at temp 0.7: 84.7 against 74.7 t/s. Prefill unchanged (2712 vs 2752 t/s at 44.5k).
-   Cost: graph capture takes 3196 tokens of the pool (283,722 -> 280,526) and ~45 s of startup.
-2) NO --mamba-cache-dtype / --mamba-ssm-cache-dtype bfloat16: config.json declares
-   mamba_ssm_dtype float32 and nothing in this repo or the reference has quality data for bf16
-   (NVIDIA report accuracy loss from quantising the mamba cache), so this is the one accuracy
-   lever that costs no context. Measured: pool 266,488 tokens, "Maximum concurrency for 262,144
-   tokens per request: 1.02x", nvidia-smi 15587 / 15568 MiB, decode unchanged (4000 tokens at
-   temp 0.7: 87.4 t/s). It eats the headroom, so --max-num-batched-tokens can NOT be raised any
-   more (see below) and needle was re-run because of it: found at ~120k and ~245k tokens.
---override-generation-config: temperature 0.7 / top_p 0.80 - the card's general non-thinking set,
-  identical to the base script. It was 0.3 / 0.95 until 2026-10-28 on the theory that for code a
-  low temperature is both more accurate and faster (MTP acceptance was 78-90 % on code prompts).
-  That is REVERTED and must not come back: with presence_penalty 0.0 and repetition_penalty 1.0
-  there is nothing to break a repetition cycle, and on a long agentic task 0.3 collapsed into
-  degenerate generation. Measured on the benchmark in c:\MyProjecs\la2-hf-headless-client-llm-testing
-  (generate an L2 client from one prompt; transcript
-  c:\Users\viktor\.claude\projects\c--MyProjecs-la2-hf-headless-client-llm-testing\b7c8eae1-5f52-4adc-ae3e-ede0e4434ddd.jsonl):
-  the run was clean through gate 1 (12/12), tsc clean and the first npm run dev, then after a large
-  hexdump tool result it emitted SEVEN consecutive replies of exactly 16384 output tokens with
-  stop_reason max_tokens and NOT ONE tool call, input_tokens frozen at ~177,700 for ~30 minutes,
-  the text degenerating into endless runs of "00000000"; two replies died with "response exceeded
-  the 16384 output token maximum" and one earlier Write was cut mid-JSON (InputValidationError).
-  Same run drifted off its instructions: answered in English against a CLAUDE.md that demands
-  Russian, and spawned no subagent at all (0 Agent/Task calls, 25 Writes by hand) where the base
-  script at 0.7 / 0.80 finished the same task in ~1 h 20 min with subagents. The perf half of this
-  script (FULL_AND_PIECEWISE, mamba fp32) is NOT implicated and stays.
-  Note the old claim here was wrong: /v1/messages does forward a client's temperature / top_p /
-  top_k (entrypoints/anthropic/serving.py:477-491), but Claude Code sends NONE of them - an
-  api-request in that transcript carries only model, betas, max_tokens, thinking,
-  context_management and output_config (0 occurrences of "temperature"/"top_p"/"top_k" in the whole
-  file, Claude Code 2.1.312). So --override-generation-config is what the model actually runs on.
-presence_penalty 0.0, not the card's 1.5: in code the repeated tokens it attacks (indentation,
-  identifiers, boilerplate) are normal. repetition_penalty 1.0 as in the base script.
-
-Measured and REJECTED (do not re-add):
-  temperature 0.3 / top_p 0.95  repetition collapse and instruction drift on a long agentic task,
-                            see the --override-generation-config paragraph above. 0.7 / 0.80 stays.
-  --max-num-seqs 1          decode 66.9-69.4 t/s greedy against 78.7-83.9 with 2. Worse.
-  --max-num-batched-tokens 8192  engine refuses to start: activations eat the KV pool,
-                            "estimated maximum model length is 256096" < 262144. 4096 stays.
-  MTP k=3                   greedy 79.4 t/s mean against 81.9 at k=4; 4000 tokens 75.4 vs 84.7.
-  flashinfer autotune on    within noise (greedy 82.9-84.9 vs 83.2-83.9) for +80 s of startup
-                            (init engine 147 s against 65 s). --no-enable-flashinfer-autotune stays.
-Closed by the build / the checkpoint, not worth re-opening:
-  fp8 KV runs on UNIT scales here (kv_cache_scheme is static fp8 but the checkpoint ships no
-  k_scale/v_scale -> "Using KV cache scaling factor 1.0", "uncalibrated q_scale"). There is no
-  --calculate-kv-scales in vLLM 0.30.0, fp8_per_token_head (dynamic scales) is declared only by
-  TRITON_ATTN (triton_attn.py; FlashInfer's list is auto/float16/bfloat16/fp8/fp8_e4m3/fp8_e5m2/
-  nvfp4/nvfp4_4over6, flashinfer.py:414-423) and Triton costs 3.7x of prefill, and bf16 KV halves
-  the pool to ~142k, i.e. it breaks 262144. Weights: this checkpoint has attention AND lm_head in
-  NVFP4 (lm_head.weight_scale_2 in the index; quantization_config.ignore covers only embed_tokens,
-  the linear_attn conv1d/in_proj, model.visual* and mtp*), so weight precision is a property of
-  the checkpoint - only a different one (unsloth/ukisai: FP8 attention + lm_head) would change it,
-  and those need int4 KV at 262144.
-VLLM_ALLOW_LONG_MAX_MODEL_LEN is NOT passed: max_position_embeddings is 262144, so it allows
-  nothing and only silences a real check.
-Everything else is the base script's and documented there: the 0cc2795 pin (later commits have no
-  MTP head), fp8 KV instead of nvfp4 (gated on SM120 in 0.30.0), --gpu-memory-utilization 0.905
-  (WSL ceiling), the four WSL variables, the patched chat template, and
-  --default-chat-template-kwargs enable_thinking:false as the single no-reasoning lever (the same
-  merged dict also feeds --reasoning-parser qwen3, so the parser starts in CONTENT state; a client
-  sending chat_template_kwargs {"enable_thinking": true} wins the merge and gets thinking back).
+Test variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat for coding without
+  reasoning. It replaces the deleted -no-reasoning-fast.bat. The context half is untouched
+  (--revision 0cc2795, fp8 KV, FlashInfer, --max-model-len 262144, --max-num-seqs 2,
+  -batched-tokens 4096, MTP k=4, 0.905, enable_thinking:false). Two lines differ from the base
+  script, both measured 2026-11-07 on free cards:
+1) NO --mamba-cache-dtype / --mamba-ssm-cache-dtype bfloat16 -> the checkpoint's own
+   mamba_ssm_dtype float32. This is the one accuracy lever that costs no context: nothing here or
+   in the reference has quality data for bf16, and NVIDIA report accuracy loss from quantising the
+   mamba cache. Pool 283,722 -> 269,385 tokens, so a full 262144-token request still fits.
+2) NO VLLM_ALLOW_LONG_MAX_MODEL_LEN: max_position_embeddings is 262144, so it allows nothing and
+   only silences a real check.
+--compilation-config cudagraph_mode=PIECEWISE STAYS, and this is the main finding. The deleted
+  -fast script dropped it for FULL_AND_PIECEWISE (+10 % decode, ~84 vs ~75 t/s). Re-measured with
+  this script, FULL graphs CORRUPT THE ENGINE:
+    - "CUDA error: unspecified launch failure" on Worker_TP1 (surfacing in
+      sampler.apply_staged_writes -> temperature.copy_to_uva, i.e. reported asynchronously), on
+      the 1st request of one start and the ~20th of another;
+    - a hung worker mid-decode at 187k context ("No available shared memory broadcast block" x4,
+      then "RPC call to sample_tokens timed out", EngineDeadError);
+    - a degenerate reply on the 187k stress prompt: 8192 tokens of "ductductduct...",
+      finish_reason length, zlib ratio 0.002, at the base sampler.
+  The same prompts on the unmodified base script (PIECEWISE + bf16 mamba) and on this script with
+  PIECEWISE restored (fp32 mamba) gave 0 faults, and the 187k stress prompt answered normally
+  (finish stop, 541-989 tokens, code present) in 12 of 12 runs. So FULL graphs are the cause,
+  not mamba fp32, not the sampler and not the request's seed. This very likely also explains the
+  2026-10-28 la2 collapse on -fast (endless "00000000", max_tokens replies, no tool calls), which
+  was blamed on temperature 0.3: -fast ran FULL_AND_PIECEWISE too. Do NOT drop PIECEWISE again.
+--override-generation-config: temperature 0.7 / top_p 0.80 / top_k 20 / min_p 0.0 /
+  presence_penalty 0.0 / repetition_penalty 1.0 - the card's non-thinking set minus its
+  presence_penalty 1.5. Chosen by measurement, 2026-11-07, on this script (PIECEWISE, fp32 mamba).
+  Code suite: 12 Python tasks with unit tests (expression evaluator, LRU, topo sort, min window,
+  wildcard, roman, duration parser, RLE with escapes, spiral, k-th largest, binary search ...),
+  3 seeds each, system prompt "reply with one python block". Stress: one 187,012-token prompt
+  (48 KB hexdump, 55 % zero rows, the la2 failure shape) asking for a TypeScript packet splitter,
+  max_tokens 8192, 2 runs. Samplers were passed per request, so all rows share one engine start.
+    config (only penalties vary)  pass   decode t/s  MTP accept  stress (2 runs)
+    presence 0.0 / rep 1.00       28/36    75.7        0.820      2x stop, code ok   <- script
+    rep 1.05 (Qwen3-Coder card)   29/36    74.5        0.794      2x stop, code ok
+    rep 1.10 (r/LocalLLaMA tip)   30/36    72.5        0.777      2x stop, code ok
+    presence 0.5                  29/36    75.4        0.815      2x stop, code ok
+    presence 1.5 (Qwen3.8 card)   26/36    75.1        0.793      2x stop, code ok
+  Pass rates 26-30/36 are inside noise (sd ~2.4 at n=36); no penalty prevents a loop, because on
+  a healthy engine none happened. What penalties do measurably is cost MTP acceptance (rep 1.10:
+  -4.3 pp, -4 % decode). presence 1.5 was the worst on correctness (eval_expr 0/3, roman 1/3),
+  matching the card's own warning about it. Hence the base set; rep 1.05 / 1.10 and presence
+  0.5 / 1.5 are measured and REJECTED - do not re-add without a longer agentic run that shows a
+  loop on this (PIECEWISE) engine.
+  Claude Code sends no samplers, so this set is what the model actually runs on.
+Measured and REJECTED earlier on -fast (still valid, do not re-add): --max-num-seqs 1 (decode
+  66.9-69.4 vs 78.7-83.9 t/s), --max-num-batched-tokens 8192 (engine refuses: "estimated maximum
+  model length is 256096"), MTP k=3 (slower), flashinfer autotune on (no gain, +80 s startup).
+Closed by the build / the checkpoint: fp8 KV runs on unit scales (no k_scale/v_scale in the
+  checkpoint, no --calculate-kv-scales in 0.30.0; fp8_per_token_head exists only on TRITON_ATTN,
+  3.7x slower prefill; bf16 KV halves the pool and breaks 262144). Attention and lm_head are NVFP4
+  in this checkpoint, so weight precision is not a flag.
+Everything else is the base script's and documented there.
 For maximum accuracy use the thinking script instead: gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat.
 ```
