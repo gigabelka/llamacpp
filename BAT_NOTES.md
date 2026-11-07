@@ -127,3 +127,53 @@ Closed by the build / the checkpoint: fp8 KV runs on unit scales (no k_scale/v_s
 Everything else is the base script's and documented there.
 For maximum accuracy use the thinking script instead: gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat.
 ```
+
+## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat
+
+```text
+Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat. ONE value differs:
+  --override-generation-config temperature 0.4 instead of 0.7. top_p 0.8 / top_k 20 / min_p 0.0 /
+  presence_penalty 0.0 / repetition_penalty 1.0 are unchanged. Every engine flag (PIECEWISE,
+  fp32 mamba, fp8 KV, MTP k=4, 262144) is -test.bat's and documented there.
+The -test.bat sweep covered only the penalties; this one covers temperature and the tail cut.
+  Measured 2026-11-07 on free cards, one engine start, samplers passed per request, seeds fixed
+  per request (outputs are reproducible: the base config re-run gave byte-identical answers).
+  Code: 25 Python tasks with unit tests (the 12 of -test.bat + CSV line parser, Dijkstra with
+  path, LIS O(n log n), LCS, signed bigint add, add_months with clamping, Trie with delete/count,
+  bracket balance with string literals, in-place rotate, tokenizer, meeting rooms, dict flatten,
+  text justification), 5 seeds. Tool: 10 agentic tool-call cases x 5 seeds (right tool, valid
+  JSON args, a multi-turn fix after a tool result, a no-tool question, shell quoting, two calls).
+  Long: 120-row checkable table, 300+ line Python module, 1500-word prose, max_tokens 8192.
+  Stage A, temperature (top_p 0.8, top_k 20), seeds 1000-1004:
+    temp   code pass  d vs 0.7 [95% CI]  decode t/s  MTP accept code/long  tool   loops/cuts
+    0.20   102/125    +2 [-2,+7]          75.4        0.836 / 0.791        50/50  module 8192 cut once (996 lines, not a loop)
+    0.40   101/125    +1 [-6,+7]          75.9        0.829 / 0.790        50/50  0
+    0.55   100/125    +0 [-5,+5]          75.9        0.828 / 0.780        50/50  0
+    0.70   100/125    base                75.1 (*)    0.812 / 0.782        50/50  0
+    0.85   100/125    +0 [-5,+6]          75.2        0.820 / 0.765        50/50  flatten ran away to 4096 tokens
+    (*) 73.1 on its first pass (warm-up); 75.1 is the stage-B re-run.
+  Stage B, tail cut at temperature 0.7:
+    top_p 0.95 / top_k 20   100/125   accept long 0.756   flatten runaway (4096 tokens)
+    top_p 0.90 / top_k 20    99/125   accept long 0.775   flatten runaway
+    top_p 0.95 / top_k 0     99/125   accept long 0.755   flatten runaway
+    top_p 0.80 / top_k 40   100/125   byte-identical to top_k 20 (top_p 0.8 already cuts deeper)
+    -> widening the tail buys nothing, costs MTP acceptance and is the only thing besides
+       temp 0.85 that produced a runaway reply. top_k is not a lever at top_p 0.8.
+  Stage C, new seeds 2000-2004, pooled with stage A (n=250):
+    0.70   198/250   accept 0.818   74.3 t/s
+    0.40   202/250   accept 0.829   76.0 t/s   +4 [-9,+17]
+    0.20   201/250   accept 0.831   75.9 t/s   +3 [-7,+12]
+  Stress, the 187,012-token hexdump prompt of -test.bat (DUMP_BYTES 48000), 3 runs each at 0.2,
+    0.4 and 0.7: 9/9 finish stop, 447-777 tokens, splitPackets present, no zero runs, 0 engine
+    errors. Low temperature did not loop on this (PIECEWISE) engine.
+  Verdict: nothing is significantly better than 0.7; 0.4 is chosen because pass, MTP acceptance
+    and decode all lean its way (none significantly), with no loop or cut anywhere. 0.2 is as
+    good on code but cut a long module at 8192 once, so 0.4 is the safer step. If an agentic
+    session ever loops, 0.7 (= -test.bat) is the one-line way back.
+min_p is CLOSED by vLLM 0.30, not by measurement: any request with min_p != 0 is rejected with
+  HTTP 400 "The min_p and logit_bias sampling parameters are not yet supported with speculative
+  decoding". Putting min_p > 0 into --override-generation-config would break every request.
+  Keep it 0.0 while MTP is on. top_k 0 (disabled) is accepted.
+Not covered: a long multi-turn Claude Code session. The harness is single-turn plus one tool
+  round; the sweep shows no regression there, not proof for hour-long agent loops.
+```
