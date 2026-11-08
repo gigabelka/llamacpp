@@ -1,5 +1,5 @@
 @echo off
-title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 local + MTP from 0cc2795, no-reasoning CODE (gittensor, MTP k=4, 2x16GB, WSL2)
+title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 local + DSpark v2 NVFP4 drafter, no-reasoning CODE (gittensor, DSpark k=7, 2x16GB, WSL2)
 
 cd /d "%~dp0.."
 
@@ -35,8 +35,9 @@ wsl -d vllm -- env ^
   --enable-auto-tool-choice ^
   --chat-template /mnt/c/MyProjecs/llamacpp/gittensor/chat_template-gittensor.jinja ^
   --default-chat-template-kwargs "{\"enable_thinking\":false}" ^
-  --speculative-config.method mtp ^
-  --speculative-config.num_speculative_tokens 4 ^
+  --speculative-config.method dspark ^
+  --speculative-config.model /opt/vllm/models/Qwen3.8-27B-DSpark-NVFP4 ^
+  --speculative-config.num_speculative_tokens 7 ^
   --override-generation-config "{\"temperature\":0.7,\"top_p\":0.8,\"top_k\":20,\"min_p\":0.0,\"presence_penalty\":0.0,\"repetition_penalty\":1.0}" ^
   --language-model-only
 pause

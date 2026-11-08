@@ -798,6 +798,13 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   is normalised by `chat_template-gittensor.jinja:103-120`: `low`/`minimal` → brief, `medium` → no preamble,
   `high`/`max`/unknown/absent → `xhigh`; `none` does **not** disable thinking. Its `CC-Switch.md` entry declares
   `reasoning: true`, `reasoningEfforts: ["low","medium","high"]`. **Not measured**; see `BAT_NOTES.md`.
+- **`gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat` = the no-reasoning config on the local
+  `/mnt/c/Qwen3.8-27B-NVFP4-RTX5090` with DSpark v2 instead of MTP.** Drafter
+  `gittensor-model-hub/Qwen3.8-27B-DSpark-NVFP4 @ eba1ac5` (1.40 GB, `Qwen3DSparkModel`, `block_size 7`) in
+  `/opt/vllm/models/Qwen3.8-27B-DSpark-NVFP4`; flags `--speculative-config.method dspark`, `.model <that path>`,
+  `.num_speculative_tokens 7` (vLLM 0.30 has `dspark`; the card's recipe is SGLang only). The BF16 source repo
+  returns 401 and is not used. It does not use the grafted MTP head. **Not measured**; risks and fallbacks in
+  `BAT_NOTES.md`.
 - **`ukisai-swift15-qwen38-27-nvfp4-vllm.bat` = the long-context unsloth script on the Swift 1.5 checkpoint.**
   Serves `ukisai/Swift-1.5-Qwen3.8-27b-NVFP4` pinned to `--revision 25482027debd5485e8108897ba9fed8d3ba16595`
   (5 shards, 21.9 GB — the same weight mass as the unsloth checkpoint; the snapshot was copied from the Windows HF cache into

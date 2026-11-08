@@ -247,3 +247,28 @@ Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat with think
 Not measured. MTP k=4 acceptance at temp 1.0 was ~49 % on the base script (bf16 mamba); expect
   decode near its 48-53 t/s, below the ~75 t/s of the no-reasoning test scripts.
 ```
+
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat
+
+```text
+Same as the MTP no-reasoning config (local /mnt/c/Qwen3.8-27B-NVFP4-RTX5090, fp8 KV, FlashInfer, PIECEWISE,
+  262144, enable_thinking:false, samplers 0.7 / 0.8 / 20), only the speculator differs: DSpark v2 instead of MTP k=4.
+Drafter: gittensor-model-hub/Qwen3.8-27B-DSpark-NVFP4 @ eba1ac5a66c74902eaa95a4000a7c5eda96d8e95 (1.40 GB, one
+  model.safetensors; Qwen3DSparkModel, 5 full-attention layers, 8 KV heads x 128, block_size 7, target_layer_ids
+  4/16/28/40/52, modelopt NVFP4 with attention q/k/v, fc, markov_head and confidence_head left in bf16).
+  Downloaded with the venv's hf download --local-dir /opt/vllm/models/Qwen3.8-27B-DSpark-NVFP4 (ext4, not drvfs).
+  The model card's recommended drafter. The BF16 source (Qwen3.8-27B-NVFP4-RTX5090-DSpark, 2.72 GB) returns HTTP 401
+  anonymously, so it was not used.
+The card gives no vLLM recipe for DSpark, only SGLang (--speculative-algorithm DSPARK --speculative-dspark-block-size 7
+  --speculative-draft-model-quantization modelopt_fp4). The vLLM flags come from vLLM 0.30.0 sources:
+  method dspark exists (config/speculative.py, models/qwen3_dspark.py), Qwen3DSparkModel is auto-detected,
+  parallel_drafting is forced on, and num_speculative_tokens must be given explicitly: 7 = the trained block_size.
+  The drafter's quantization comes from its own quantization_config (modelopt).
+DSpark speeds up decode only; prefill is unchanged. Card figures (RTX 5090, not this bench): 180 t/s vs 137 t/s for the
+  built-in MTP head, accept length 2.90 overall, 3.86 on coding.
+The grafted MTP head in the model folder is not used by this script.
+Not measured. Expected risks at first start: the drafter's own KV (~10 KB/token at fp8, ~1.25 GiB/card at 262144)
+  plus ~0.7 GB/card of weights may not fit next to a 262144 pool -> lower --max-model-len to the logged
+  "estimated maximum model length", then --max-num-batched-tokens 2048. The hybrid GDN target may need extra state
+  slots under DSpark (SGLang uses 4 per request).
+```
