@@ -761,6 +761,10 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   - Still rejected from `-fast`: `--max-num-seqs 1`, `-batched-tokens 8192`, MTP `n=3`, flashinfer autotune.
     Still closed: calibrated fp8 KV scales (none in the checkpoint, no `--calculate-kv-scales` in 0.30.0),
     `fp8_per_token_head` (Triton only, 3.7× slower prefill), bf16 KV (halves the pool).
+  - **A/B against the base script, 2026-11-08: fp32 mamba costs no speed.** Same prompts on both: decode
+    78.7 vs 78.9 t/s, prefill 1 762 vs 1 758 t/s at 111k, decode at 99k depth ~49 t/s on both, 2 streams
+    ~140 t/s aggregate on both; only the pool differs (269 385 vs 283 722). Two long prompts are prefilled
+    one after the other on both scripts, so the bigger pool bought no concurrency. Table in `BAT_NOTES.md`.
 - **`gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat` = `…-test.bat` with `temperature 0.4`
   instead of 0.7**, everything else identical. Temperature/tail sweep measured 2026-11-07 (25 tasks × 10 seeds,
   tool calls, long outputs, 187k stress; tables in `BAT_NOTES.md`): no setting is significantly better than 0.7,

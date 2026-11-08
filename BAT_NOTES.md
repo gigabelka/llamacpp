@@ -126,6 +126,31 @@ Closed by the build / the checkpoint: fp8 KV runs on unit scales (no k_scale/v_s
   in this checkpoint, so weight precision is not a flag.
 Everything else is the base script's and documented there.
 For maximum accuracy use the thinking script instead: gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat.
+A/B against the base -no-reasoning.bat, 2026-11-08, cards free, one start each, same prompts and
+  seeds, server-default samplers, wall clock via streaming (TTFT = prefill, rest = decode):
+                                         base (bf16 mamba)   -test (fp32 mamba)
+    GPU KV cache size / concurrency      283,722 / 1.08x     269,385 / 1.03x
+    Available KV, init engine            4.89 GiB, 16.6 s    4.89 GiB, 15.6 s
+    code 12x3, 1 stream: per-req decode  78.9 t/s            78.7 t/s
+                         MTP accept      0.800               0.799
+                         pass            28/36               27/36
+    code 12x3, 2 streams: aggregate      138.1 t/s           143.7 t/s
+                          per-req decode 76.8 t/s            78.1 t/s
+                          MTP accept     0.824               0.839
+    prefill 33k (2 runs)                 3044 / 3036 t/s     3029 / 2996 t/s
+    prefill 111k (2 runs)                1760 / 1757 t/s     1764 / 1762 t/s
+    decode at 99k depth, 512 tok         48.2 / 49.7 t/s     48.8 / 48.9 t/s
+    2 x 120k at once: wall               148.7 s             148.2 s
+    2 x 138k at once: wall               189.8 s             191.2 s
+    preemptions, errors in server log    0, 0                0, 0
+  Conclusion: fp32 mamba state costs nothing measurable in speed; every row is inside run-to-run
+  noise. The only real difference is the 14,337-token smaller pool.
+  Concurrency is bounded by the scheduler, not by the pool. Two long prompts are not prefilled in
+  parallel: at 2 x 120k the second prefill runs after the first, and the first request decodes at
+  ~3.4 t/s while it does (prefill chunks starve the other stream's decode). At 2 x 138k
+  (276k > -test pool, < base pool) the second request waits for the first to finish entirely on
+  BOTH scripts, so the base script's larger pool did not buy concurrency there either. On short
+  code requests 2 streams give ~1.9x aggregate throughput at almost no per-stream cost.
 ```
 
 ## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat
