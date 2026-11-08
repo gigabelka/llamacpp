@@ -275,6 +275,35 @@ Not measured. MTP k=4 acceptance at temp 1.0 was ~49 % on the old pinned-revisio
   well below the ~70-75 t/s of the no-reasoning configs.
 ```
 
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning-repro.bat
+
+```text
+Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning.bat for byte-identical replies to an
+  identical request. Two lines differ: the title and --max-num-seqs 1 (was 2). Samplers, KV, backend,
+  MTP k=4, 262144 are unchanged, so speed and quality are the base script's.
+Repeatability needs BOTH halves:
+  - the client sends "seed" in every request. The server cannot set it: --override-generation-config
+    keeps only repetition_penalty/temperature/top_k/top_p/min_p/max_new_tokens (vllm/config/model.py:1750),
+    and the global --seed does not make separate requests repeat. Claude Code sends no seed (and its
+    prompt changes every turn), so through Claude Code replies are never repeatable on any config;
+  - --max-num-seqs 1, so a second request never shares a batch. On the base script a seeded request
+    run alongside another request gave a different reply (stable only because the overlap was).
+    Cost: a second request (Claude Code's background calls) waits in the queue.
+VLLM_BATCH_INVARIANT=1 (vLLM's "deterministic under any batch" mode) is NOT an option on this model:
+  vllm/v1/attention/selector.py:235 raises for a mamba backend without batch-invariance support, and
+  GDNAttentionBackend (v1/attention/backends/gdn_attn.py) does not declare it - 48 of 64 layers are GDN.
+  It would also cost speed: it disables FlashInfer (Triton attention only, 3.7x slower prefill here),
+  forces NCCL to one channel and swaps GEMMs for persistent kernels.
+Measured 2026-11-08, cards free, PCIe replays 0, short code prompt, max_tokens 600:
+  base script, no seed            5 runs -> 5 different replies
+  base script, seed 1234          5 runs -> 1 reply (also at temperature 0)
+  base script, seed + concurrent  5 runs -> 1 reply, but different from the solo one
+  this script, seed 1234          11 runs (5 solo, 3 with a request queued before, 3 after) -> 1 reply
+  A reply repeats only within one config: this script's seeded reply differs from the base script's.
+  Decode, 1000 tokens, ignore_eos, 3 runs: 20.1-20.3 s here vs 20.4-20.6 s on the base (~49 t/s both).
+  Pool 270 833 tokens (base 269 385).
+```
+
 ## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat
 
 ```text

@@ -798,6 +798,11 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   is normalised by `chat_template-gittensor.jinja:103-120`: `low`/`minimal` → brief, `medium` → no preamble,
   `high`/`max`/unknown/absent → `xhigh`; `none` does **not** disable thinking. Its `CC-Switch.md` entry declares
   `reasoning: true`, `reasoningEfforts: ["low","medium","high"]`. **Not measured**; see `BAT_NOTES.md`.
+- **`gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning-repro.bat` = `…-mtp-no-reasoning.bat` with
+  `--max-num-seqs 1`, for byte-identical replies.** Measured 2026-11-08: with `seed` in the request, 11/11 replies
+  identical, including with concurrent requests; decode unchanged (~49 t/s). The seed must come from the client
+  (the server cannot set it; Claude Code sends none). `VLLM_BATCH_INVARIANT=1` cannot start on this model
+  (the GDN backend lacks batch-invariance support). Details in `BAT_NOTES.md`.
 - **`gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat` = the no-reasoning config on the local
   `/mnt/c/Qwen3.8-27B-NVFP4-RTX5090` with DSpark v2 instead of MTP.** Drafter
   `gittensor-model-hub/Qwen3.8-27B-DSpark-NVFP4 @ eba1ac5` (1.40 GB, `Qwen3DSparkModel`, `block_size 7`) in
