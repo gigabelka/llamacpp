@@ -64,21 +64,22 @@
 ```json
 {
   "api": "openai-completions",
-  "apiKeyEnv": "CC_SWITCH_DSH_CC_SWITCH_VLLM",
+  "baseURL": "http://127.0.0.1:1234/v1",
   "models": {
     "Qwen3.8-27B-NVFP4": {
       "name": "Qwen3.8-27B-NVFP4 (thinking)",
       "input": [
         "text"
       ],
+      "contextWindow": 229376,
       "id": "Qwen3.8-27B-NVFP4",
       "maxTokens": 32768,
-      "reasoningEfforts": [
-        "low",
-        "medium",
-        "xhigh"
-      ],
-      "contextWindow": 229376,
+      "reasoningEfforts": {
+        "off": null,
+        "low": "low",
+        "medium": "medium",
+        "xhigh": "xhigh"
+      },
       "limit": {
         "context": 229376,
         "output": 32768
@@ -94,9 +95,9 @@
       }
     }
   },
-  "displayName": "Qwen3.8-27B-NVFP4 Llamacpp",
-  "baseURL": "http://127.0.0.1:1234/v1",
-  "name": "Qwen3.8-27B-NVFP4 Llamacpp",
+  "apiKeyEnv": "CC_SWITCH_DSH_CC_SWITCH_VLLM",
+  "displayName": "Qwen3.8-27B-NVFP4 Llamacpp (thinking)",
+  "name": "Qwen3.8-27B-NVFP4 Llamacpp (thinking)",
   "options": {
     "baseURL": "http://127.0.0.1:1234/v1",
     "apiKey": "lamacpp",
