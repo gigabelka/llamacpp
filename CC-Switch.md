@@ -1,15 +1,16 @@
 # CC-Switch: провайдеры для DeepSeek Harness
 
-Конфиги провайдеров CC Switch для DeepSeek Harness (`apiKeyEnv: CC_SWITCH_DSH_CC_SWITCH_VLLM`),
+Конфиги провайдеров [CC Switch](https://github.com/farion1231/cc-switch) для DeepSeek Harness (`apiKeyEnv: CC_SWITCH_DSH_CC_SWITCH_VLLM`),
 по одному на vLLM-скрипт. Раньше они лежали отдельными `.json` рядом со скриптами в `vllm/`.
 
 Общее для всех: сервер на `http://127.0.0.1:1234/v1`, ID модели `Qwen3.8-27B-NVFP4` (первое имя в
 `--served-model-name`), `contextWindow 229376` + `maxTokens 32768` = 262144 = `--max-model-len`.
 Почему сумма не должна превышать окно, см. раздел «Claude Code как клиент этих серверов» в `CLAUDE.md`.
 
-## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning.bat
 
-Рассуждения выключены: `reasoning: false`, `reasoningEfforts: false`.
+Рассуждения выключены (`--default-chat-template-kwargs {"enable_thinking":false}`):
+`reasoning: false`, `reasoningEfforts: false`.
 
 ```json
 {
@@ -51,10 +52,14 @@
 }
 ```
 
-## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-reasoning.bat
 
-Рассуждения включены, уровень выбирает harness: `reasoning: true`,
-`reasoningEfforts: ["low","medium","high"]`. Как шаблон нормализует уровень, см. `BAT_NOTES.md`.
+Рассуждения включены (`--default-chat-template-kwargs {"enable_thinking":true,"preserve_thinking":true}`),
+уровень выбирает harness: `reasoning: true`, `reasoningEfforts: ["low","medium","high"]`.
+Шаблон `gittensor/chat_template-gittensor.jinja` нормализует `reasoning_effort` запроса:
+`low`/`minimal` → краткое рассуждение, `medium` → без преамбулы, `high`/`max`/неизвестное/отсутствует → `xhigh`.
+`none` рассуждения **не** выключает (становится `xhigh`); выключает только `chat_template_kwargs
+{"enable_thinking": false}` в запросе. Подробнее — в `BAT_NOTES.md`.
 
 ```json
 {
@@ -71,7 +76,7 @@
       "reasoningEfforts": [
         "low",
         "medium",
-        "high"
+        "xhigh"
       ],
       "contextWindow": 229376,
       "limit": {

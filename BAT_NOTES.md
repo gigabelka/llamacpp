@@ -248,6 +248,33 @@ Not measured. MTP k=4 acceptance at temp 1.0 was ~49 % on the base script (bf16 
   decode near its 48-53 t/s, below the ~75 t/s of the no-reasoning test scripts.
 ```
 
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-reasoning.bat
+
+```text
+Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning.bat with thinking ON (local
+  /mnt/c/Qwen3.8-27B-NVFP4-RTX5090 with the grafted MTP head, fp8 KV, FlashInfer, PIECEWISE, fp32 mamba,
+  MTP k=4, 262144). Its CC Switch provider config is in CC-Switch.md (reasoning true,
+  reasoningEfforts ["low","medium","high"]). Three lines differ: the title and the two below.
+--default-chat-template-kwargs {"enable_thinking":true,"preserve_thinking":true}. Both are the
+  template's own defaults (gittensor/chat_template-gittensor.jinja:16-17); spelled out so the intent is
+  visible. The model card's kwargs table calls preserve_thinking=false "prefix-cache safe"; this repo
+  keeps true (old turns keep <think>, the rendered prefix is not rewritten). Not verified either way.
+  The level is the request's reasoning_effort, normalised by gittensor/chat_template-gittensor.jinja:103-120:
+    xhigh (also high, max, unknown, absent)  -> "think carefully ... prioritize correctness" preamble
+    medium                                   -> no instruction (the model's native thinking)
+    low (also minimal)                       -> "keep your thinking brief" preamble
+  "none" does NOT turn thinking off - it becomes xhigh. The only off switch is chat_template_kwargs
+  {"enable_thinking": false} in the request (the request wins the merge; the parser follows the same dict).
+--override-generation-config temperature 1.0 / top_p 0.95 / top_k 20 = the model's own generation_config.json
+  (the card gives no separate sampler recommendation; its thinking-on smoke test ran at temperature 1.0).
+  NOT the no-reasoning 0.7 / 0.8: that set was chosen with thinking off, and lowering the temperature in
+  thinking mode is what sends the model into loops inside <think>. min_p 0.0 is mandatory (vLLM 0.30
+  rejects min_p != 0 with MTP on); presence_penalty 0.0 / repetition_penalty 1.0 are neutral (penalties
+  cost MTP acceptance, see the -test section).
+Not measured. MTP k=4 acceptance at temp 1.0 was ~49 % on the old pinned-revision script; expect decode
+  well below the ~70-75 t/s of the no-reasoning configs.
+```
+
 ## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat
 
 ```text
