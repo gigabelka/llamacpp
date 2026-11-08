@@ -15,6 +15,8 @@ plus two long-form design docs (in Russian):
   RTX 5060 Ti 16 GB cards. Treat this as the authoritative reference when changing
   any `-c`, `-ts`, `-ub`, `-ctk`, or `-ctv` value.
 - `BAT_NOTES.md` — comments of the `.bat` scripts (the scripts themselves carry none), one section per script.
+- `CC-Switch.md` — CC Switch provider configs for DeepSeek Harness (JSON blocks), one section per vLLM script;
+  replaces the former `vllm/*.json` files.
 - `*.jinja` — chat templates passed to the server via `--chat-template-file`.
 - `cuda13/*.bat` — the llama.cpp launch scripts.
 - `vllm/*.bat` — the vLLM launch scripts (vLLM inside WSL2, safetensors models).
@@ -766,12 +768,12 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `top_p` 0.9/0.95 costs acceptance and produced runaway replies; `top_k` is inert at `top_p 0.8`.
   **`min_p` ≠ 0 is rejected by vLLM 0.30 with MTP on** (HTTP 400 on every request) — never put it into
   `--override-generation-config` on these scripts.
-- **`gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat` (+ `.json` for the harness) = test2 with
+- **`gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat` (provider config for the harness in `CC-Switch.md`) = test2 with
   thinking on**, so the harness picks the level: `--default-chat-template-kwargs
   {"enable_thinking":true,"preserve_thinking":true}` and the card's thinking-mode samplers (`1.0 / 0.95 / 20 /
   0.0 / 0.0 / 1.0`), not test2's 0.4 — low temperature loops inside `<think>`. The request's `reasoning_effort`
   is normalised by `chat_template-gittensor.jinja:103-120`: `low`/`minimal` → brief, `medium` → no preamble,
-  `high`/`max`/unknown/absent → `xhigh`; `none` does **not** disable thinking. The `.json` declares
+  `high`/`max`/unknown/absent → `xhigh`; `none` does **not** disable thinking. Its `CC-Switch.md` entry declares
   `reasoning: true`, `reasoningEfforts: ["low","medium","high"]`. **Not measured**; see `BAT_NOTES.md`.
 - **`ukisai-swift15-qwen38-27-nvfp4-vllm.bat` = the long-context unsloth script on the Swift 1.5 checkpoint.**
   Serves `ukisai/Swift-1.5-Qwen3.8-27b-NVFP4` pinned to `--revision 25482027debd5485e8108897ba9fed8d3ba16595`

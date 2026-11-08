@@ -182,8 +182,8 @@ Not covered: a long multi-turn Claude Code session. The harness is single-turn p
 
 ```text
 Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat with thinking ON, so the
-  harness can pick the reasoning level. Paired with the .json of the same name (reasoning true,
-  reasoningEfforts ["low","medium","high"]). Every engine flag (PIECEWISE, fp32 mamba, fp8 KV,
+  harness can pick the reasoning level. Its CC Switch provider config is in CC-Switch.md
+  (reasoning true, reasoningEfforts ["low","medium","high"]). Every engine flag (PIECEWISE, fp32 mamba, fp8 KV,
   MTP k=4, 262144, pool 269,385 tokens) is -test.bat's and documented there. Two lines differ:
 --default-chat-template-kwargs {"enable_thinking":true,"preserve_thinking":true}. Both are the
   template's own defaults (chat_template-gittensor.jinja:16-17); spelled out so the intent is
