@@ -279,8 +279,8 @@ Not measured. MTP k=4 acceptance at temp 1.0 was ~49 % on the old pinned-revisio
 
 ```text
 Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning.bat for byte-identical replies to an
-  identical request. Two lines differ: the title and --max-num-seqs 1 (was 2). Samplers, KV, backend,
-  MTP k=4, 262144 are unchanged, so speed and quality are the base script's.
+  identical request. Three lines differ: the title, --max-num-seqs 1 (was 2) and temperature 0.6
+  (was 0.7, see the sweep at the end). KV, backend, MTP k=4, 262144 are unchanged.
 Repeatability needs BOTH halves:
   - the client sends "seed" in every request. The server cannot set it: --override-generation-config
     keeps only repetition_penalty/temperature/top_k/top_p/min_p/max_new_tokens (vllm/config/model.py:1750),
@@ -301,7 +301,25 @@ Measured 2026-11-08, cards free, PCIe replays 0, short code prompt, max_tokens 6
   this script, seed 1234          11 runs (5 solo, 3 with a request queued before, 3 after) -> 1 reply
   A reply repeats only within one config: this script's seeded reply differs from the base script's.
   Decode, 1000 tokens, ignore_eos, 3 runs: 20.1-20.3 s here vs 20.4-20.6 s on the base (~49 t/s both).
-  Pool 270 833 tokens (base 269 385).
+  Pool 270 833 tokens (base 269 385). (These rows were taken at temperature 0.7.)
+temperature 0.7 -> 0.6, measured 2026-11-08 on this script, cards free, PCIe replays 0 throughout.
+  Samplers came from --override-generation-config (requests carried no sampler fields), harness =
+  bench3 of the -test2 sweep: 25 code tasks x 5 seeds (1000-1004), 10 tool cases x 5, long x 2.
+    temp  code pass  d vs 0.7 [95% CI]  code t/s  MTP accept code/tool/long  tool   cuts / runaways
+    0.70   97/125    base                77.0      0.828 / 0.960 / 0.849      50/50  module 8192 once
+    0.60  102/125    +5 [-3,+14]         74.1      0.821 / 0.968 / 0.850      50/50  module 8192 once,
+                                                                                     flatten ran to 4096 once
+  Repeatability at 0.6: no seed 5/5 different; seed 1234 11/11 identical (5 solo, 3+3 with a concurrent
+  request), and that reply differs from the 0.7 one - the seeded reply is a function of the samplers.
+  Decode, 1000 tokens ignore_eos: 20.9-21.7 s (0.7: 20.1-20.3 s).
+  Verdict: no significant difference in either direction. Pass leans to 0.6, speed leans to 0.7
+  (-4 % code t/s, acceptance inside noise), and 0.6 produced the only runaway code reply. 0.6 is kept
+  as asked; 0.7 is the one-line way back.
+presence_penalty in --override-generation-config is a NO-OP: vLLM keeps only repetition_penalty /
+  temperature / top_k / top_p / min_p / max_new_tokens (vllm/config/model.py:1750). The startup line
+  "Default vLLM sampling parameters have been overridden ... {'repetition_penalty': 1.0, 'temperature':
+  0.6, 'top_k': 20, 'top_p': 0.8, 'min_p': 0.0}" shows it missing. 0.0 is vLLM's default anyway, so
+  nothing changes here; a non-zero value would have to be sent per request.
 ```
 
 ## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat

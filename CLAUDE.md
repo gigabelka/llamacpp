@@ -799,8 +799,11 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `high`/`max`/unknown/absent → `xhigh`; `none` does **not** disable thinking. Its `CC-Switch.md` entry declares
   `reasoning: true`, `reasoningEfforts: ["low","medium","high"]`. **Not measured**; see `BAT_NOTES.md`.
 - **`gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning-repro.bat` = `…-mtp-no-reasoning.bat` with
-  `--max-num-seqs 1`, for byte-identical replies.** Measured 2026-11-08: with `seed` in the request, 11/11 replies
-  identical, including with concurrent requests; decode unchanged (~49 t/s). The seed must come from the client
+  `--max-num-seqs 1` and `temperature 0.6`, for byte-identical replies.** Measured 2026-11-08: with `seed` in the
+  request, 11/11 replies identical, including with concurrent requests, at both 0.7 and 0.6; decode unchanged (~49 t/s).
+  0.6 vs 0.7 on 25 tasks × 5 seeds: pass 102 vs 97/125 (+5 [-3,+14], not significant), code t/s −4 %, one runaway
+  reply at 0.6. `presence_penalty` in `--override-generation-config` is silently dropped by vLLM (only
+  `repetition_penalty/temperature/top_k/top_p/min_p/max_new_tokens` are kept) — on every vLLM script here. The seed must come from the client
   (the server cannot set it; Claude Code sends none). `VLLM_BATCH_INVARIANT=1` cannot start on this model
   (the GDN backend lacks batch-invariance support). Details in `BAT_NOTES.md`.
 - **`gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat` = the no-reasoning config on the local
