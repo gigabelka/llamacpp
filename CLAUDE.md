@@ -509,20 +509,31 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `model.safetensors.index.json`, so `--speculative-config.method mtp` finds it with no `-md`
   equivalent. `num_speculative_tokens 2` is the guide's own value and matches what this repo
   settled on for llama.cpp;
-- **everything lives inside the WSL distro `Unsloth-Engines-6133eb79`** (Ubuntu 24.04), set up by
-  Unsloth Desktop. There is no Python, pip, nvcc or docker on the Windows side at all. vLLM is at
-  `/opt/unsloth/engines/vllm/env-<hash>/bin/vllm` (the `<hash>` is install-specific — list the
-  directory, do not assume it), and the model sits in that distro's own HF cache
-  (`HF_HOME=/opt/unsloth/hf`) on ext4 as well as in `C:\Users\viktor\.cache\huggingface`. Prefer
-  the in-distro copy: `/mnt/c` goes through drvfs and is far slower for 21 GB;
+- **everything lives inside the WSL distro `vllm`** (Ubuntu 24.04), built by hand on 2026-11-08. It
+  replaced `Unsloth-Engines-6133eb79`, the distro Unsloth Desktop had set up: Unsloth Desktop was
+  uninstalled together with its `ext4.vhdx`, and the dead registration was removed with
+  `wsl --unregister`. Every older note here that names `Unsloth-Engines-…`, `/opt/unsloth/…` or
+  `env-<hash>` describes that gone install. There is no Python, pip, nvcc or docker on the Windows side
+  at all. How `vllm` is built (as root, `wsl -d vllm -u root`):
+  `wsl --install Ubuntu-24.04 --name vllm --no-launch` → `apt-get install build-essential curl git wget python3.12-dev` (uv picks the system
+  `/usr/bin/python3.12`, and Triton compiles a C helper at start that needs `Python.h` — without the
+  `-dev` package the server dies in model inspection with `fatal error: Python.h: No such file or directory`)
+  → NVIDIA's `wsl-ubuntu` repo (`cuda-keyring`) + `cuda-toolkit-13-0` (toolkit only, the driver comes
+  from Windows) → `uv` in `/usr/local/bin` → `uv venv /opt/vllm/env --python 3.12` →
+  `uv pip install vllm==0.30.0 ninja huggingface_hub` (pulls torch 2.13.0+cu130 and
+  flashinfer-python 0.6.18.post1; `hf` comes with huggingface_hub 2.x, there is no `[cli]` extra any more). vLLM is at `/opt/vllm/env/bin/vllm`, the toolkit at
+  `/usr/local/cuda-13.0`, the HF cache at `HF_HOME=/opt/vllm/hf` on ext4. **That cache is empty**:
+  the unsloth and ukisai checkpoints went with the old distro and were not re-downloaded, so
+  `vllm/*.bat` and the HF-id gittensor scripts fail offline until `hf download` (from the venv, with
+  `HF_HOME=/opt/vllm/hf`) puts them back. The only model on disk is the local gittensor folder
+  `c:\Qwen3.8-27B-NVFP4-RTX5090\`; `/mnt/c` goes through drvfs and is slower to load from than ext4;
 - **the four environment variables are the whole trick.** Without them the server dies two to
   three minutes in, *after* loading the weights, with a different error each time — this cost four
   runs to work out, so do not strip them:
-  - `CUDA_HOME=<env>/cuda` — flashinfer JIT-compiles the prefill kernel and
-    `flashinfer/jit/cpp_ext.py:get_cuda_path()` reads this var; the bundled toolkit (nvcc 13.0.88,
-    headers, libcudart, nvvm/libdevice) is complete. Otherwise
+  - `CUDA_HOME=/usr/local/cuda-13.0` (was `<env>/cuda` in the Unsloth venv) — flashinfer JIT-compiles
+    the prefill kernel and `flashinfer/jit/cpp_ext.py:get_cuda_path()` reads this var. Otherwise
     `RuntimeError: Could not find nvcc and default cuda_home='/usr/local/cuda' doesn't exist`;
-  - `PATH=<env>/bin:<env>/cuda/bin:…` — `ninja` is in the venv's `bin`, and because vllm is
+  - `PATH=/opt/vllm/env/bin:/usr/local/cuda-13.0/bin:…` — `ninja` is in the venv's `bin`, and because vllm is
     invoked by absolute path the venv PATH is never activated. Otherwise
     `FileNotFoundError: 'ninja'`;
   - `LIBRARY_PATH=/usr/lib/wsl/lib` — all ten nvcc compiles succeed and only the final link fails
@@ -709,8 +720,15 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   non-thinking samplers.** This is the **fast-prefill** no-reasoning config, against the long-context one
   (`unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat`, int4 + `TRITON_ATTN`, ~476 t/s at 120k): both serve the
   full 262144, but fp8 KV + FlashInfer on this checkpoint prefill 3.7× faster, and with thinking off the
-  output is short, so latency is prefill, not decode — decode is the same 44–54 t/s on either. The
-  KV/backend half is **unchanged on purpose** (pin `--revision 0cc2795…`, `--kv-cache-dtype fp8`,
+  output is short, so latency is prefill, not decode — decode is the same 44–54 t/s on either.
+  **Since 2026-11-08 it loads the local folder `/mnt/c/Qwen3.8-27B-NVFP4-RTX5090`** (Windows
+  `c:\Qwen3.8-27B-NVFP4-RTX5090\`) instead of the HF id, so `--revision` is gone. That folder is the later
+  MTP-less build (2 shards, 17.9 GB); the head was grafted back from `0cc2795`: `model-mtp.safetensors`
+  (the 15 `mtp.*` bf16 tensors, 849 MB, cut out by HTTP Range), `config.json` / `hf_quant_config.json`
+  replaced by `0cc2795`'s (they differed only in the MTP fields and `mtp*` excludes), 15 index entries added;
+  originals kept as `*.orig`. **Measured once** on the rebuilt `vllm` distro: pool 269 385 tokens, one code
+  reply at 70 t/s with MTP draft acceptance 79 % — the grafted head fits; details in `BAT_NOTES.md`. The
+  KV/backend half is **unchanged on purpose** (`--kv-cache-dtype fp8`,
   auto-FlashInfer, `--max-num-seqs 2`, `-batched-tokens 4096`, `cudagraph_mode PIECEWISE`, `--mamba-*-cache-dtype
   bfloat16`, `--no-enable-flashinfer-autotune`, MTP `n=4`, `0.905`), so every number in the bullet above
   applies: KV 4.89 GiB/card, pool 283 722 tokens, prefill 2 955 t/s at 33k / 1 755 t/s at 111k, decode
@@ -864,7 +882,7 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   while probing tactics for `fp4_gemm` — that is by design;
 - only one server at a time, as with the llama.cpp scripts: it binds the same port 1234 and wants
   both cards. Orphaned TP workers hold ~11 GiB each after a crash —
-  `wsl -d Unsloth-Engines-6133eb79 -- pkill -9 -f vllm`; `pkill -f 'vllm serve'` alone is not
+  `wsl -d vllm -- pkill -9 -f vllm`; `pkill -f 'vllm serve'` alone is not
   always enough.
 
 ## Chat templates

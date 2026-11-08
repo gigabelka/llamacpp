@@ -47,7 +47,23 @@ Differences from the recipe, on purpose:
     ipc_cache / --api-key (Docker).
 --chat-template gittensor/chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
   check patched: the stock one raises on "high"/"max" and Claude Code (high) got HTTP 400.
-The checkpoint is pinned to 0cc2795: later commits have no MTP head, decode falls to ~42 t/s.
+Model path /mnt/c/Qwen3.8-27B-NVFP4-RTX5090 (Windows c:\Qwen3.8-27B-NVFP4-RTX5090\), not the HF id,
+  so no --revision. That folder holds a LATER build of the repo (2 shards, 17.9 GB) whose MTP head was
+  removed upstream; the head was grafted back on 2026-11-08 from revision 0cc2795:
+  - model-mtp.safetensors = the 15 mtp.* tensors (bf16, 849,398,784 B of data) cut by HTTP Range out of
+    0cc2795's model-00002/00003-of-00003.safetensors; byte spot-checks against HF matched;
+  - config.json and hf_quant_config.json replaced by 0cc2795's own files - against the folder's
+    originals they differ ONLY in mtp_num_hidden_layers 1, mtp_use_dedicated_embeddings false and the
+    "mtp*" / "mtp.layers.0*" quantization excludes;
+  - model.safetensors.index.json: 15 mtp.* -> model-mtp.safetensors entries, total_size and
+    total_parameters raised accordingly. The untouched originals sit next to them as *.orig.
+  Without the head --speculative-config.method mtp cannot start and decode falls to ~42 t/s.
+  Measured once, 2026-11-08, on the rebuilt `vllm` distro, cards free: weights 40.8 s + MTP head
+  10.3 s from /mnt/c, init engine 380 s cold (40.6 s compile; first flashinfer JIT), KV 4.88 GiB/card,
+  pool 269,385 tokens (1.03x of 262144). One ~605-token code reply: 70 t/s wall, MTP mean acceptance
+  length 4.16, draft acceptance 79.1 %, per-position 0.943 / 0.830 / 0.730 / 0.660 - the grafted head
+  fits the later body. One sample, not an A/B. If acceptance ever drops to ~0 %, restore the *.orig
+  files and drop the two --speculative-config lines.
 --mamba-ssm-cache-dtype bfloat16: neither the recipe nor this repo has quality data for it.
 No-reasoning variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat. Only two flags differ, and
   the KV/backend half is unchanged on purpose, so every measurement in CLAUDE.md for the base

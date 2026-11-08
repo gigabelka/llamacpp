@@ -3,16 +3,16 @@ title vLLM Server - Qwen3.8-27B NVFP4 no-reasoning CODE (Unsloth, 2x16GB, WSL2)
 
 cd /d "%~dp0.."
 
-wsl -d Unsloth-Engines-6133eb79 -- env ^
+wsl -d vllm -- env ^
   CUDA_DEVICE_ORDER=PCI_BUS_ID ^
   CUDA_VISIBLE_DEVICES=0,1 ^
-  HF_HOME=/opt/unsloth/hf ^
+  HF_HOME=/opt/vllm/hf ^
   HF_HUB_OFFLINE=1 ^
-  CUDA_HOME=/opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/cuda ^
-  PATH=/opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/bin:/opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/cuda/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ^
+  CUDA_HOME=/usr/local/cuda-13.0 ^
+  PATH=/opt/vllm/env/bin:/usr/local/cuda-13.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin ^
   LIBRARY_PATH=/usr/lib/wsl/lib ^
   MAX_JOBS=4 ^
-  /opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/bin/vllm serve ^
+  /opt/vllm/env/bin/vllm serve ^
   unsloth/Qwen3.8-27B-NVFP4 ^
   --served-model-name Qwen3.8-27B-NVFP4 Llamacpp ^
   --host 127.0.0.1 ^
