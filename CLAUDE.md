@@ -29,9 +29,10 @@ executing one of the `.bat` files (see below).
 All llama.cpp scripts live in `cuda13/` and point at the CUDA 13.x build
 (`c:\Llamacpp\cuda13\llama-server.exe`). An earlier `cuda12/` set (the same
 configs against a CUDA 12.x build) has been removed — `README.md` still describes
-it, so trust this file and the actual tree instead. The seven vLLM scripts live in
-`vllm/` instead; they still do `cd /d "%~dp0.."`, so the repo root stays their working
-directory and the `--chat-template` paths resolve unchanged.
+it, so trust this file and the actual tree instead. The vLLM scripts live in
+`vllm/` instead, except the `gittensor-*` ones (with their `chat_template-gittensor.jinja`),
+which have their own `gittensor/` folder at the repo root; they all still do
+`cd /d "%~dp0.."`, so the repo root stays their working directory.
 
 **Two exceptions to everything below.** First, the bench now has **two** RTX 5060 Ti,
 not three: `nvidia-smi` and `Win32_VideoController` list `01:00.0` and `03:00.0` only.
@@ -40,7 +41,7 @@ Every three-card config here (`qwen-qwen38-27-6k.bat`, `ornith-ornith15-35-8k.ba
 three-field `-ts` the hardware no longer matches, and every three-card measurement in
 this file and in `CALCULATE.md` describes a machine that is gone. Nothing has been
 retuned for two cards yet. Second, the vLLM scripts (`vllm/unsloth-qwen38-27-nvfp4-vllm*.bat`
-and `vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060*.bat`, `vllm/ukisai-swift15-qwen38-27-nvfp4-vllm.bat`) are **not** llama.cpp scripts at all —
+and `gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060*.bat`, `vllm/ukisai-swift15-qwen38-27-nvfp4-vllm.bat`) are **not** llama.cpp scripts at all —
 they run vLLM inside WSL2 against a safetensors model, so the
 knob table below (`-c`, `-ts`, `-ctk`/`-ctv`, `-b`/`-ub`, `-ngl`) does not apply to them,
 and neither does anything in `CALCULATE.md`. See their own entries under “Per-model notes”.
@@ -873,9 +874,9 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 | `qwen-general.jinja`  | every llama.cpp script in `cuda13/` except `venastine-xing4-29-a4b-5km.bat` |
 | `chat_template.jinja` | `unsloth-qwen38-27-nvfp4-vllm.bat`, `unsloth-qwen38-27-nvfp4-vllm-rtx5060.bat`, `unsloth-qwen38-27-nvfp4-vllm-no-reasoning.bat` and `ukisai-swift15-qwen38-27-nvfp4-vllm.bat` (the vLLM ones) |
 | `xing4-general.jinja` | only `venastine-xing4-29-a4b-5km.bat` |
-| `chat_template-gittensor.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat` and `gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
+| `gittensor/chat_template-gittensor.jinja` | `gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat`, `gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat` and `gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat` (the pinned revision's own template ≠ the repo-root `chat_template.jinja`, with the `reasoning_effort` check patched) |
 
-There are now **four** templates in this repo. `chat_template-gittensor.jinja` is the template shipped with revision `0cc2795` copied verbatim, with one change: where the stock one raised on anything but `xhigh/medium/low` (so Claude Code's `reasoning_effort: "high"` via `/v1/messages` got HTTP 400, 2026-10-21), it now maps `high`/`max` → `xhigh`, `minimal` → `low`, unknown → `xhigh`. `qwen-general.jinja` serves every llama.cpp script but one.
+There are now **four** templates in this repo. `gittensor/chat_template-gittensor.jinja` is the template shipped with revision `0cc2795` copied verbatim, with one change: where the stock one raised on anything but `xhigh/medium/low` (so Claude Code's `reasoning_effort: "high"` via `/v1/messages` got HTTP 400, 2026-10-21), it now maps `high`/`max` → `xhigh`, `minimal` → `low`, unknown → `xhigh`. `qwen-general.jinja` serves every llama.cpp script but one.
 `chat_template.jinja` in the repo root is the Qwen3.8-27B template copied verbatim out of the
 NVFP4 snapshot (still byte-identical to it, re-checked 2026-10-28) and is passed by the vLLM
 scripts listed above, on purpose: they serve the safetensors model through vLLM. Unlike `qwen-general.jinja`

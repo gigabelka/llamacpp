@@ -7,7 +7,7 @@
 `--served-model-name`), `contextWindow 229376` + `maxTokens 32768` = 262144 = `--max-model-len`.
 Почему сумма не должна превышать окно, см. раздел «Claude Code как клиент этих серверов» в `CLAUDE.md`.
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat
 
 Рассуждения выключены: `reasoning: false`, `reasoningEfforts: false`.
 
@@ -51,7 +51,7 @@
 }
 ```
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat
 
 Рассуждения включены, уровень выбирает harness: `reasoning: true`,
 `reasoningEfforts: ["low","medium","high"]`. Как шаблон нормализует уровень, см. `BAT_NOTES.md`.

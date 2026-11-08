@@ -1,5 +1,5 @@
 @echo off
-title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 @0cc2795 reasoning CODE (gittensor, MTP k=4, 2x16GB, WSL2)
+title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 @0cc2795 no-reasoning CODE (gittensor, MTP k=4, 2x16GB, WSL2)
 
 cd /d "%~dp0.."
 
@@ -34,10 +34,10 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --reasoning-parser qwen3 ^
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
-  --chat-template /mnt/c/MyProjecs/llamacpp/chat_template-gittensor.jinja ^
-  --default-chat-template-kwargs "{\"enable_thinking\":true,\"preserve_thinking\":true}" ^
+  --chat-template /mnt/c/MyProjecs/llamacpp/gittensor/chat_template-gittensor.jinja ^
+  --default-chat-template-kwargs "{\"enable_thinking\":false}" ^
   --speculative-config.method mtp ^
   --speculative-config.num_speculative_tokens 4 ^
-  --override-generation-config "{\"temperature\":1.0,\"top_p\":0.95,\"top_k\":20,\"min_p\":0.0,\"presence_penalty\":0.0,\"repetition_penalty\":1.0}" ^
+  --override-generation-config "{\"temperature\":0.7,\"top_p\":0.8,\"top_k\":20,\"min_p\":0.0,\"presence_penalty\":0.0,\"repetition_penalty\":1.0}" ^
   --language-model-only
 pause

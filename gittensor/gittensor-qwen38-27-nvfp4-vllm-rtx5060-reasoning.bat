@@ -1,5 +1,5 @@
 @echo off
-title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 @0cc2795 (gittensor, MTP k=4, 2x16GB, WSL2)
+title vLLM Server - Qwen3.8-27B NVFP4 RTX5090 @0cc2795 reasoning CODE (gittensor, MTP k=4, 2x16GB, WSL2)
 
 cd /d "%~dp0.."
 
@@ -13,7 +13,6 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   LIBRARY_PATH=/usr/lib/wsl/lib ^
   MAX_JOBS=4 ^
   NCCL_P2P_DISABLE=1 ^
-  VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 ^
   VLLM_FLASHINFER_WORKSPACE_BUFFER_SIZE=67108864 ^
   /opt/unsloth/engines/vllm/env-ea90944493ff410f9c86ea4c67408701/bin/vllm serve ^
   gittensor-model-hub/Qwen3.8-27B-NVFP4-RTX5090 ^
@@ -28,8 +27,6 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --max-num-batched-tokens 4096 ^
   --gpu-memory-utilization 0.905 ^
   --kv-cache-dtype fp8 ^
-  --mamba-cache-dtype bfloat16 ^
-  --mamba-ssm-cache-dtype bfloat16 ^
   --compilation-config "{\"cudagraph_mode\":\"PIECEWISE\"}" ^
   --no-enable-flashinfer-autotune ^
   --cpu-offload-gb 0 ^
@@ -37,10 +34,10 @@ wsl -d Unsloth-Engines-6133eb79 -- env ^
   --reasoning-parser qwen3 ^
   --tool-call-parser qwen3_xml ^
   --enable-auto-tool-choice ^
-  --chat-template /mnt/c/MyProjecs/llamacpp/chat_template-gittensor.jinja ^
-  --default-chat-template-kwargs "{\"preserve_thinking\":true}" ^
+  --chat-template /mnt/c/MyProjecs/llamacpp/gittensor/chat_template-gittensor.jinja ^
+  --default-chat-template-kwargs "{\"enable_thinking\":true,\"preserve_thinking\":true}" ^
   --speculative-config.method mtp ^
   --speculative-config.num_speculative_tokens 4 ^
-  --override-generation-config "{\"temperature\":1.0,\"top_p\":0.95,\"top_k\":20,\"min_p\":0.0,\"repetition_penalty\":1.0}" ^
+  --override-generation-config "{\"temperature\":1.0,\"top_p\":0.95,\"top_k\":20,\"min_p\":0.0,\"presence_penalty\":0.0,\"repetition_penalty\":1.0}" ^
   --language-model-only
 pause

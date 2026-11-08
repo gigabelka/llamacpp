@@ -17,7 +17,7 @@ VLLM_DISABLED_KERNELS: for ModelOpt FP8 layers vLLM picks FlashInferFP8ScaledMML
   profile_run. Disabling it falls back to CutlassFP8ScaledMMLinearKernel, the one the unsloth checkpoint runs on.
 ```
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat
 
 ```text
 Recipe: https://github.com/skrodahl/qwen38-27B-dual-rtx5060 (fp8 KV + FlashInfer + MTP k=4).
@@ -28,13 +28,13 @@ Differences from the recipe, on purpose:
     this distro has 0.30.0 where nvfp4 KV is closed on SM120.
   no PYTORCH_CUDA_ALLOC_CONF=expandable_segments (breaks startup inside WSL), no --load-format
     ipc_cache / --api-key (Docker).
---chat-template chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
+--chat-template gittensor/chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
   check patched: the stock one raises on "high"/"max" and Claude Code (high) got HTTP 400.
 The checkpoint is pinned to 0cc2795: later commits have no MTP head, decode falls to ~42 t/s.
 --mamba-ssm-cache-dtype bfloat16: neither the recipe nor this repo has quality data for it.
 ```
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat
 
 ```text
 Recipe: https://github.com/skrodahl/qwen38-27B-dual-rtx5060 (fp8 KV + FlashInfer + MTP k=4).
@@ -45,7 +45,7 @@ Differences from the recipe, on purpose:
     this distro has 0.30.0 where nvfp4 KV is closed on SM120.
   no PYTORCH_CUDA_ALLOC_CONF=expandable_segments (breaks startup inside WSL), no --load-format
     ipc_cache / --api-key (Docker).
---chat-template chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
+--chat-template gittensor/chat_template-gittensor.jinja = the revision's own template with the reasoning-effort
   check patched: the stock one raises on "high"/"max" and Claude Code (high) got HTTP 400.
 The checkpoint is pinned to 0cc2795: later commits have no MTP head, decode falls to ~42 t/s.
 --mamba-ssm-cache-dtype bfloat16: neither the recipe nor this repo has quality data for it.
@@ -54,7 +54,7 @@ No-reasoning variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060.bat. Only two fla
   script still applies (pool 283,722 tokens at 262144, prefill 2955 t/s at 33k / 1755 t/s at 111k).
 --default-chat-template-kwargs is the lever, not an edit to the template: the same merged dict
   also feeds the reasoning parser, so with enable_thinking=false the template emits a closed empty
-  <think></think> (chat_template-gittensor.jinja:300) AND the parser starts in CONTENT state.
+  <think></think> (gittensor/chat_template-gittensor.jinja:300) AND the parser starts in CONTENT state.
   Without it the whole answer would land in "reasoning" with an empty "content". The request wins
   the merge, so a client sending chat_template_kwargs {"enable_thinking": true} gets thinking back
   - which is why --reasoning-parser qwen3 stays. Side effect: the reasoning-effort block is skipped
@@ -66,7 +66,7 @@ presence_penalty 0.0, not the card's 1.5: in code the repeated tokens it attacks
   is now attributed to FULL CUDA graphs, not to the sampler (see the -test section).
 ```
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat
 
 ```text
 Test variant of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning.bat for coding without
@@ -153,7 +153,7 @@ A/B against the base -no-reasoning.bat, 2026-11-08, cards free, one start each, 
   code requests 2 streams give ~1.9x aggregate throughput at almost no per-stream cost.
 ```
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat
 
 ```text
 Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test.bat. ONE value differs:
@@ -203,7 +203,7 @@ Not covered: a long multi-turn Claude Code session. The harness is single-turn p
   round; the sweep shows no regression there, not proof for hour-long agent loops.
 ```
 
-## vllm/gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat
+## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-reasoning-test2.bat
 
 ```text
 Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat with thinking ON, so the
@@ -211,11 +211,11 @@ Copy of gittensor-qwen38-27-nvfp4-vllm-rtx5060-no-reasoning-test2.bat with think
   (reasoning true, reasoningEfforts ["low","medium","high"]). Every engine flag (PIECEWISE, fp32 mamba, fp8 KV,
   MTP k=4, 262144, pool 269,385 tokens) is -test.bat's and documented there. Two lines differ:
 --default-chat-template-kwargs {"enable_thinking":true,"preserve_thinking":true}. Both are the
-  template's own defaults (chat_template-gittensor.jinja:16-17); spelled out so the intent is
+  template's own defaults (gittensor/chat_template-gittensor.jinja:16-17); spelled out so the intent is
   visible. preserve_thinking keeps <think> in past assistant turns, so the prefix is not
   rewritten and the prefix cache keeps hitting.
   The level is the request's reasoning_effort, normalised by the patched block at
-  chat_template-gittensor.jinja:103-120:
+  gittensor/chat_template-gittensor.jinja:103-120:
     xhigh (also high, max, unknown, absent)  -> "think carefully ... prioritize correctness" preamble
     medium                                   -> no instruction (the model's native thinking)
     low (also minimal)                       -> "keep your thinking brief" preamble
