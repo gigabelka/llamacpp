@@ -803,8 +803,12 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   `gittensor-model-hub/Qwen3.8-27B-DSpark-NVFP4 @ eba1ac5` (1.40 GB, `Qwen3DSparkModel`, `block_size 7`) in
   `/opt/vllm/models/Qwen3.8-27B-DSpark-NVFP4`; flags `--speculative-config.method dspark`, `.model <that path>`,
   `.num_speculative_tokens 7` (vLLM 0.30 has `dspark`; the card's recipe is SGLang only). The BF16 source repo
-  returns 401 and is not used. It does not use the grafted MTP head. **Not measured**; risks and fallbacks in
-  `BAT_NOTES.md`.
+  returns 401 and is not used. It does not use the grafted MTP head. The drafter's `config.json` /
+  `hf_quant_config.json` are patched (`*markov_head*`, `*confidence_head*`, `*fc` added to the modelopt
+  exclusions, originals in `*.orig`): without that vLLM quantises the bf16 `markov_w2` and dies with
+  `size of tensor a (128) must match … (256)`. **`--max-model-len 139264`, not 262144**: with the drafter's
+  weights and KV only 4.07 GiB/card of KV is left (6.99 needed at 262144, vLLM estimates 140080 max). **Not
+  measured**; details and fallbacks in `BAT_NOTES.md`.
 - **`ukisai-swift15-qwen38-27-nvfp4-vllm.bat` = the long-context unsloth script on the Swift 1.5 checkpoint.**
   Serves `ukisai/Swift-1.5-Qwen3.8-27b-NVFP4` pinned to `--revision 25482027debd5485e8108897ba9fed8d3ba16595`
   (5 shards, 21.9 GB — the same weight mass as the unsloth checkpoint; the snapshot was copied from the Windows HF cache into
@@ -1087,6 +1091,10 @@ vLLM-скрипты здесь служат `--max-model-len 262144`, а llama.c
 - `CLAUDE_CODE_MAX_OUTPUT_TOKENS=32768` — это **жёсткий потолок Claude Code**, а не подсказка:
   ответ длиннее обрывается ошибкой `Claude's response exceeded the N output token maximum`.
   16384 для этих моделей мало (проверено — сессия падала), 32768 хватает.
+
+Исключение — `gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-dspark-no-reasoning.bat`: он служит
+`--max-model-len 139264`, и для него сумма двух переменных должна быть ≤ 139264 (например 106496 + 32768) —
+отдельный провайдер в CC Switch.
 
 Соблазн выставить контекст в полные 262144 ведёт к мёртвой зоне: запросы с промптом от 229k до
 точки автокомпакта (~241k) будут гарантированно отбиваться vLLM по сумме с `max_tokens`.

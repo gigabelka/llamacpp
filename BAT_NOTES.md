@@ -252,7 +252,8 @@ Not measured. MTP k=4 acceptance at temp 1.0 was ~49 % on the base script (bf16 
 
 ```text
 Same as the MTP no-reasoning config (local /mnt/c/Qwen3.8-27B-NVFP4-RTX5090, fp8 KV, FlashInfer, PIECEWISE,
-  262144, enable_thinking:false, samplers 0.7 / 0.8 / 20), only the speculator differs: DSpark v2 instead of MTP k=4.
+  enable_thinking:false, samplers 0.7 / 0.8 / 20), except the speculator (DSpark v2 instead of MTP k=4) and the
+  window: --max-model-len 139264, not 262144 (see below).
 Drafter: gittensor-model-hub/Qwen3.8-27B-DSpark-NVFP4 @ eba1ac5a66c74902eaa95a4000a7c5eda96d8e95 (1.40 GB, one
   model.safetensors; Qwen3DSparkModel, 5 full-attention layers, 8 KV heads x 128, block_size 7, target_layer_ids
   4/16/28/40/52, modelopt NVFP4 with attention q/k/v, fc, markov_head and confidence_head left in bf16).
@@ -267,8 +268,24 @@ The card gives no vLLM recipe for DSpark, only SGLang (--speculative-algorithm D
 DSpark speeds up decode only; prefill is unchanged. Card figures (RTX 5090, not this bench): 180 t/s vs 137 t/s for the
   built-in MTP head, accept length 2.90 overall, 3.86 on coding.
 The grafted MTP head in the model folder is not used by this script.
-Not measured. Expected risks at first start: the drafter's own KV (~10 KB/token at fp8, ~1.25 GiB/card at 262144)
-  plus ~0.7 GB/card of weights may not fit next to a 262144 pool -> lower --max-model-len to the logged
-  "estimated maximum model length", then --max-num-batched-tokens 2048. The hybrid GDN target may need extra state
-  slots under DSpark (SGLang uses 4 per request).
+The drafter's config is patched (2026-11-08). First start died loading the drafter weights with
+  "RuntimeError: The size of tensor a (128) must match the size of tensor b (256) at non-singleton dimension 1"
+  (vocab_parallel_embedding.py:507, from qwen3_dspark.py:369). markov_head.markov_w2.weight is BF16 [248320, 256]
+  in the checkpoint, but vLLM built it as an NVFP4 ParallelLMHead (packed 256/2 = 128): the modelopt ignore entry
+  "markov_head*" does not match the vLLM prefix "model.markov_head.markov_w2" (is_layer_excluded in modelopt.py
+  tries exact, literal substring and fnmatch; the x* -> x, x.* rewrite in apply_vllm_mapper is not applied because
+  the mapper sits on the inner DFlashQwen3Model). confidence_head* had the same problem. Fix: "*markov_head*",
+  "*confidence_head*", "*fc" appended to quantization_config.ignore in config.json (the list vLLM reads) and to
+  exclude_modules in hf_quant_config.json; originals kept as config.json.orig / hf_quant_config.json.orig in
+  /opt/vllm/models/Qwen3.8-27B-DSpark-NVFP4. Re-apply after any re-download of the drafter.
+262144 does not fit (second start, 2026-11-08, cards free): "To serve at least one request with the model's max
+  seq len (262144), (6.99 GiB KV cache is needed, which is larger than the available KV cache memory (4.07 GiB) ...
+  the estimated maximum model length is 140080". The MTP script has 4.89 GiB available at the same settings; the
+  drafter's weights and its own 5-layer KV take the difference, and the log adds "Add 4 padding layers, may waste at
+  most 25.00% KV cache memory" and "no KV cache group could be identified as the draft model's". The 2.9 GiB gap is
+  far beyond bf16 mamba cache or --max-num-seqs 1 (hundreds of MiB), so the window was cut to 139264 (the repo's
+  earlier fp8 profile value, just under the 140080 estimate). If it still fails: --max-num-batched-tokens 2048.
+Claude Code on this script: the provider's CLAUDE_CODE_MAX_CONTEXT_TOKENS + CLAUDE_CODE_MAX_OUTPUT_TOKENS must sum to
+  <= 139264 (e.g. 106496 + 32768), not the 229376 + 32768 used for the 262144 scripts, or vLLM rejects long requests.
+Not measured beyond starting attempts.
 ```

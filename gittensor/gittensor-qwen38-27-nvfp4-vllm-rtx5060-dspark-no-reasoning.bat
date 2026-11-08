@@ -21,7 +21,7 @@ wsl -d vllm -- env ^
   --port 1234 ^
   --tensor-parallel-size 2 ^
   --trust-remote-code ^
-  --max-model-len 262144 ^
+  --max-model-len 139264 ^
   --max-num-seqs 2 ^
   --max-num-batched-tokens 4096 ^
   --gpu-memory-utilization 0.905 ^
