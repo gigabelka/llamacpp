@@ -18,6 +18,8 @@
 | Копия конфига для запуска и документации | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json` |
 | Конфиг режима с размышлениями | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json` |
 | **Запуск режима с размышлениями** (сервер + TUI-дашборд) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-reason.bat` |
+| Профиль режима с размышлениями (runtime) | `C:\Users\viktor\AppData\Roaming\Strata\profiles\iq3_s-coding-reason.json` |
+| Лог сервера режима с размышлениями | `C:\Users\viktor\AppData\Local\Strata\runtime\iq3_s-coding-reason.server.log` |
 | Лог движка режима с размышлениями | `c:\MyProjecs\llamacpp\strata\iq3_s-coding-reason.engine.log` |
 | **Файл запуска (с дашбордом `strata launch`)** | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.bat` |
 | Файл запуска PowerShell (то же самое) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.ps1` |
@@ -189,12 +191,17 @@ no-reasoning, DFlash2 (кроме b7/b8/b11). 3 coding-промпта × 2 по�
 strata\run-iq3_s-coding-noreason.bat
 powershell -NoProfile -ExecutionPolicy Bypass -File strata\run-iq3_s-coding-noreason.ps1
 
-# режим с размышлениями: сервер в отдельном окне + TUI-дашборд, API на http://127.0.0.1:8080
+# режим с размышлениями: сервер фоном + TUI-дашборд в том же окне, API на http://127.0.0.1:8080
 strata\run-iq3_s-coding-reason.bat
-# то же вручную, в двух окнах (переменная обязательна, иначе патч выключит мышление)
+# то же вручную (переменная обязательна, иначе патч выключит мышление);
+# профиль создаётся один раз, если его ещё нет
+strata profile create iq3_s-coding-reason --from-config c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json
 set STRATA_ALLOW_THINKING=1
-start "Strata engine IQ3_S reason" cmd /k strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json
+strata runtime start --profile iq3_s-coding-reason
 strata monitor --url http://127.0.0.1:8080
+# остановка и статус этого запуска
+strata runtime stop --profile iq3_s-coding-reason
+strata runtime status --profile iq3_s-coding-reason
 
 # headless-вариант (без монитора), если нужен только сервер
 strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json
@@ -297,18 +304,30 @@ headless-запуска `strata serve --profile`, сам `.bat` её больш�
 | Проверка API | `strata\bench\verify_reasoning_api.py` |
 | Проверка кэша при смене уровня | `strata\bench\check_effort_cache.py` |
 
-`.bat` делает `set STRATA_ALLOW_THINKING=1`, поднимает `strata serve --profile` в отдельном
-титулованном окне (`start … cmd /k`, чтобы ошибка старта оставалась на экране) и открывает в
-своём окне дашборд `strata monitor --url http://127.0.0.1:8080` — те же семь экранов
+`.bat` делает `set STRATA_ALLOW_THINKING=1`, один раз создаёт профиль `iq3_s-coding-reason`
+(`%APPDATA%\Strata\profiles\`, ссылка на репозиторный конфиг — байты не копируются), поднимает
+сервер как фоновый runtime-инстанс
+(`strata runtime start --profile iq3_s-coding-reason --wait 900`) и в том же — единственном —
+окне открывает дашборд `strata monitor --url http://127.0.0.1:8080`: те же семь экранов
 (Overview / Serving / Requests / Engine / Hardware / Logs / Connect), что и у `strata launch`;
-веб-UI и API остаются на `http://127.0.0.1:8080`. Пока движок грузится, монитор пишет, что сервер
-недоступен, и повторяет попытки (`strata serve` поднимает HTTP только после готовности движка);
-`r` — повторить сразу. `q` в мониторе только отцепляет, модель продолжает работать; остановка —
-Ctrl+C в окне движка или закрыть его. Через `strata launch --preset` этот режим не запустить:
-пресет один на модель и каждый запуск пересобирает конфиг из `install\strata-iq3_s.json`, где
-`reasoning_effort: none`; два пресета с разным мышлением на одну модель не сосуществуют.
-Одновременно живёт только один режим (порт 8080 и обе карты); если 8080 уже занят, окно движка
-сразу покажет `port 8080 is already in use`, а дашборд будет показывать уже запущенный сервер.
+веб-UI и API — на `http://127.0.0.1:8080`. Пока модель грузится, консоль показывает строку
+«Starting the model...»; `runtime start` ждёт готовности и печатает
+`iq3_s-coding-reason: ready  instance …  http://127.0.0.1:8080` (или ошибку — тогда скрипт
+останавливается с `pause`). `STRATA_ALLOW_THINKING` наследуется owner host'ом и сервером, а
+точная причина сбоя (например, занятый порт) — в
+`%LOCALAPPDATA%\Strata\runtime\iq3_s-coding-reason.server.log`. `q` в мониторе только отцепляет:
+сервер продолжает работать, окно закрывается. Остановка —
+`strata runtime stop --profile iq3_s-coding-reason`; статус —
+`strata runtime status --profile iq3_s-coding-reason`. Через `strata launch --preset` этот режим не
+запустить: пресет один на модель и каждый запуск пересобирает конфиг из `install\strata-iq3_s.json`,
+где `reasoning_effort: none`; два пресета с разным мышлением на одну модель не сосуществуют.
+Повторный запуск ничего не перезапускает: скрипт сначала спрашивает
+`strata runtime status --profile iq3_s-coding-reason`, и состояние `ready` или `starting` сразу
+ведёт в дашборд (двойной клик во время загрузки модели тоже просто откроет монитор). Если 8080
+уже занят другим сервером (например, noreason-запуском), скрипт пишет
+`Another Strata server already serves http://127.0.0.1:8080; stop it to start the reason instance.`
+и ждёт клавишу. Одновременно живёт только один режим (порт 8080 и обе карты): reason-инстанс и
+noreason-запуск вместе не поднимаются.
 
 Патч `serve\` (§4) стал гейтом: без `STRATA_ALLOW_THINKING` оба слоя жёстко выключают `<think>` —
 noreason-пресет, `install\run-iq3_s.bat` и обычный `strata launch` ведут себя как раньше.
@@ -426,7 +445,9 @@ per-request на одном старте (r0, 1.0/0.95, `effort_position end`).
   `reasoning_effort: "low"` и `"xhigh"` вернули `reasoning_content` 0 символов и
   `reasoning_tokens: 0`, хотя в конфиге стоит `high`, а лог печатает `thinking level: high` —
   гейт патча стоит ниже конфига и перебивает и его, и запрос.
-- `strata serve` пишет свой вывод в консоль, а не в лог-файл; лог движка — по полю `log` конфига.
+- `strata serve` пишет свой вывод в консоль; у reason-скрипта сервер фоновый (runtime), его вывод —
+  в `%LOCALAPPDATA%\Strata\runtime\iq3_s-coding-reason.server.log`, лог движка — по полю `log`
+  конфига (`strata\iq3_s-coding-reason.engine.log`).
 - Файл `<config>.shared-settings.json` рядом с конфигом (настройки Chat из веб-UI) перекрывает
   `reasoning_effort`; при замерах его быть не должно.
 - Никакой побитовой повторяемости по-прежнему нет (§6): с thinking это тем более так.

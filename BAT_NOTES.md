@@ -431,37 +431,65 @@ thinking ON at the template's `xhigh` level and the model-card sampler set
 It does **not** use `strata launch --preset`. The preset (and `strata launch` itself) rebuilds the
 engine config from the single installed model config `%LOCALAPPDATA%\Strata\install\strata-iq3_s.json`,
 which holds `reasoning_effort: none` and the 0.6/0.8 samplers, so two presets on one model cannot
-differ in thinking. Instead the script starts the server from its own run config with
-`strata serve --profile strata\qwen3.8-flash-next-iq3_s.coding-reason.json` and attaches the same
-dashboard to it, in two console windows:
+differ in thinking. Instead the script runs its own run config as a managed background instance and
+shows the dashboard in the one console it opens — the same shape `strata launch` has for the preset:
 
-- `start "Strata engine IQ3_S reason" cmd /k call ... serve --profile ...` opens a titled console of
-  its own. `cmd /k` keeps it open when the server ends, so a refused start (port 8080 taken, a bad
-  config) stays readable instead of vanishing with the window. `start` inherits the environment, so
-  the child sees `STRATA_ALLOW_THINKING=1` — the patch gate reads the variable from the server
-  process. The load progress, the `ready:` line and later request errors appear there; Ctrl+C in
-  that window (or closing it) stops the model.
-- the script's own window then runs `strata monitor --url http://127.0.0.1:8080`: the same seven
+- the saved profile `iq3_s-coding-reason` (`%APPDATA%\Strata\profiles\iq3_s-coding-reason.json`)
+  only points at the repository config (`source_config`,
+  `strata\qwen3.8-flash-next-iq3_s.coding-reason.json`); the bytes are not copied, so an edit to
+  the config is used by the next start. The script creates the profile on the first run
+  (`if not exist … profile create …`; `profile create` refuses an existing name, hence the guard).
+  When the repository moves, repoint it with
+  `strata profile use-config iq3_s-coding-reason --from-config <new path>`;
+- `strata runtime start --profile iq3_s-coding-reason --wait 900` starts the owner host without a
+  window (`CREATE_NO_WINDOW`) and the server under it; the host inherits the script's environment,
+  so `STRATA_ALLOW_THINKING=1` reaches the server process, which is what the patch gate reads
+  (strata_control/runtime.py:715-719, 1064). The script prints one "Starting the model..." line,
+  then the command waits for the model to load and prints
+  `<profile>: ready  instance …  http://127.0.0.1:8080`, or fails with exit 6 (`server_exited` —
+  port 8080 taken, a broken engine — or `this profile already has a live managed runtime`) or exit
+  8 (the 900 s wait expired, the load goes on; the start itself continues) plus the engine-log
+  tail; a bad or missing config/profile is refused earlier as `strata: …` with exit 2 or 5; on any
+  failure the script prints the path of the server log and pauses instead of opening a dashboard
+  nobody serves. The precise reason for a failed start (for a taken port, `port 8080 is already in
+  use - is Strata (or another server) already running?`) is written to that server log, not echoed
+  — the console line is `…: failed  server_exited`, followed by the engine-log tail (stale when the
+  engine never started, as for a taken port). `--wait` accepts 0..1800 (strata_control/runtime.py MAX_START_WAIT).
+  A live instance keeps the environment it was started with, and the script attaches to it rather
+  than restarting it (see below), so one started by hand without `STRATA_ALLOW_THINKING` keeps
+  serving without thinking until it is stopped. Ctrl+C during the wait only abandons the wait: the
+  owner host is detached and finishes starting the model in the background (a later run just opens
+  the dashboard against it);
+- `strata monitor --url http://127.0.0.1:8080` runs in the script's own console: the same seven
   screens `strata launch` opens (Overview / Serving / Requests / Engine / Hardware / Logs /
   Connect). `--url` is required — the monitor's default address is `http://127.0.0.1:8095`
-  (strata_cli/connections.py), and a `serve` session is not a launch it could discover.
+  (strata_cli/connections.py) and `strata monitor` only discovers `strata launch` sessions.
   Telemetry needs no key here: a local bind is open when the config sets neither `api_key` nor a
-  telemetry key (serve/server.py:7458-7466). `strata serve` binds HTTP only once the engine is
-  ready (serve/server.py:9917), so at first the monitor reports that it cannot reach the server
-  and retries with backoff (up to 30 s); `r` forces a retry. `q` here only detaches — nothing was
-  started by the monitor command, so there is no "keep serving or stop" question (`ask_quit=False`,
-  strata_cli/launch/monitor_ext.py:160-161); the model keeps serving and the script's window
-  closes. Stopping the model is done in the engine window.
+  telemetry key (serve/server.py:7458-7466). The start command has already waited for readiness,
+  so the monitor connects at once. `q` only detaches — the monitor did not start the server, so
+  there is no "keep serving or stop" question (`ask_quit=False`,
+  strata_cli/launch/monitor_ext.py:160-161); the server keeps serving and the script's window
+  closes. Stop it with `strata runtime stop --profile iq3_s-coding-reason` (drains, then frees both
+  cards); `strata runtime status --profile iq3_s-coding-reason` prints `ready`, `failed` or
+  `stopped`.
+
+A second run is cheap: before starting anything the script asks
+`strata runtime status --profile iq3_s-coding-reason`, and a `ready` or `starting` line goes straight
+to `strata monitor` — a double-click while the model is still loading opens the dashboard too, and
+only the first run pays the load (`runtime start` would otherwise refuse with `this profile already
+has a live managed runtime`). When the start fails and another Strata server already answers on 8080
+(the noreason launch, for one), the script adds `Another Strata server already serves
+http://127.0.0.1:8080; stop it to start the reason instance.` before the pause.
 
 A piped launcher (an IDE "run" button, no TTY) gets `interactive monitor needs a terminal` from the
-monitor (exit 2) and the script pauses on it; start the file from a normal console. If anything
-already serves port 8080, the server refuses within its first seconds — the check runs before the
-engine load — with `port 8080 is already in use` in the engine window, and the dashboard then
-shows the server that was already there (possibly the noreason one), so check the engine window,
-not only the dashboard.
+monitor (exit 2) and the script pauses on it; start the file from a normal console.
 
-Engine log: `strata\iq3_s-coding-reason.engine.log`; the server's own output stays in its console.
-Only one configuration runs at a time, as before: they share port 8080 and both cards.
+Engine log: `strata\iq3_s-coding-reason.engine.log`. The server's own output (startup lines, request
+errors) goes to `%LOCALAPPDATA%\Strata\runtime\iq3_s-coding-reason.server.log`, because the instance
+is backgrounded. Only one configuration runs at a time, as before: the reason instance and the
+noreason launch share port 8080 and both cards, so they cannot be up together; a server started
+while 8080 is taken exits with `address already in use` in its server log, and the script fails at
+`runtime start` instead of opening the dashboard against the other server.
 
 The `set` line sets `STRATA_ALLOW_THINKING=1`. The reworked no-reasoning patch
 (`strata/patches/apply-no-reasoning.ps1`) reads that variable in both request dialects and passes it

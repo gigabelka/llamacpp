@@ -920,13 +920,17 @@ alone, both RTX 5060 Ti), chosen by which `.bat` is started — one server at a 
 - `strata/run-iq3_s-coding-noreason.bat` → `strata launch --preset "IQ3_S 200K"`, which rebuilds the
   engine config from the single installed model config `install\strata-iq3_s.json`.
   Sampling 0.6/0.8, thinking hard off.
-- `strata/run-iq3_s-coding-reason.bat` → `strata serve --profile
-  strata\qwen3.8-flash-next-iq3_s.coding-reason.json` with `STRATA_ALLOW_THINKING=1`, started in its
-  own `cmd /k` console, while the script's console runs `strata monitor --url
-  http://127.0.0.1:8080` — the same seven-view dashboard `strata launch` opens (`--url` is
-  required; the monitor's default address is 8095). `q` there only detaches and the model keeps
-  serving; Ctrl+C in the engine console (or closing it) stops it. Sampling 1.0/0.95/20 (the card's
-  thinking set), level `high` (= the template's `xhigh`) by default.
+- `strata/run-iq3_s-coding-reason.bat` → `strata runtime start --profile iq3_s-coding-reason
+  --wait 900` with `STRATA_ALLOW_THINKING=1`, then `strata monitor --url http://127.0.0.1:8080`
+  in the same console — one window, the same seven-view dashboard `strata launch` opens (`--url`
+  is required; the monitor's default address is 8095). The saved profile
+  `%APPDATA%\Strata\profiles\iq3_s-coding-reason.json` only references the repo config, so edits
+  are picked up; the .bat creates it if missing, and a rerun while the profile is `ready` or
+  `starting` skips the start and just opens the monitor. `q` only detaches and the model keeps
+  serving;
+  stop with `strata runtime stop --profile iq3_s-coding-reason` (a live instance keeps its startup
+  environment, so a profile started without the variable has to be stopped first). Sampling
+  1.0/0.95/20 (the card's thinking set), level `high` (= the template's `xhigh`) by default.
   It cannot use `strata launch`: a preset is per model, and `launch` always starts from the
   installed config, so two presets cannot differ in thinking.
 
