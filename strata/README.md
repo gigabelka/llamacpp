@@ -41,7 +41,7 @@
 | Словари драфтера | `...\terminal\0.1.69\data\draft_vocab{,_en,_cyrillic,_latin,_fr,_arabic}.bin` |
 | Патч | `c:\MyProjecs\llamacpp\strata\patches\no-reasoning.patch` |
 | Скрипт патча (идемпотентный, с `-Revert`) | `c:\MyProjecs\llamacpp\strata\patches\apply-no-reasoning.ps1` |
-| Бэкапы `serve\` | `c:\MyProjecs\llamacpp\strata\backup\{frontend.py,chat_template.jinja}.orig` |
+| Бэкапы `serve\` | рядом с файлами: `...\terminal\current\serve\<file>.pre-no-reasoning` (их делает скрипт патча); исходники 0.1.69 — `c:\MyProjecs\llamacpp\strata\backup\*.orig` (история, не источник отката для новой версии) |
 | Бенчмарк | `c:\MyProjecs\llamacpp\strata\bench\bench.py`, `prompts.json` |
 | Конфиги A/B | `c:\MyProjecs\llamacpp\strata\bench\configs\b0..b12.json` |
 | Результаты A/B | `c:\MyProjecs\llamacpp\strata\bench\results\*.json` |
@@ -110,7 +110,20 @@
 - Патч действует на **все Qwen-модели** этого инстанса Strata (шаблон общий).
 - `strata update` перезаписывает `serve\` — после обновления запустить
   `patches\apply-no-reasoning.ps1` заново (скрипт идемпотентен) и перезапустить сервер.
-- Откат: `patches\apply-no-reasoning.ps1 -Revert` (копирует `backup\*.orig` обратно).
+- Откат: `patches\apply-no-reasoning.ps1 -Revert` (восстанавливает `.pre-no-reasoning`
+  рядом с файлами; `backup\*.orig` от 0.1.69 для новой версии не использовать).
+
+### После обновления Strata
+
+1. `strata update` — он заменяет `terminal\<новая версия>\serve\`.
+2. `powershell -ExecutionPolicy Bypass -File strata\patches\apply-no-reasoning.ps1`
+   — скрипт идёт через `terminal\current`, сам кладёт `.pre-no-reasoning` копии и проверяет
+   якоря. `already patched` = всё на месте; ошибка `anchor not found` = шаблон в новой
+   версии изменился, патч надо пересмотреть по `patches\no-reasoning.patch`.
+3. Перезапустить сервер: `strata launch --preset "IQ3_S 200K" --no-tui`.
+4. Проверить лог сервера: `thinking level: none`, `DFlash2`, `draft vocabulary: draft_vocab_en.bin`.
+5. Конфиг модели (`install\strata-iq3_s.json`) обновление не трогает; если он окажется
+   пересоздан, повторить `python -I strata\apply_final_config.py`.
 
 ## 5. A/B-замеры
 
@@ -195,7 +208,7 @@ python -I c:\MyProjecs\llamacpp\strata\bench\make_configs.py `
 ## 8. Ограничения и риски
 
 - Патч `serve\` не переживает `strata update`; после обновления повторить
-  `patches\apply-no-reasoning.ps1` и перезапустить сервер.
+  `patches\apply-no-reasoning.ps1` и перезапустить сервер (порядок — §4, «После обновления Strata»).
 - Профили `strata-ab-b*` и конфиги `bench\configs\b*.json` — артефакты A/B, на работу
   штатного пресета не влияют; можно удалить.
 - `--prompt-cache 0` в b10/b11 не отключил переиспользование промпта (TTFT второго повтора

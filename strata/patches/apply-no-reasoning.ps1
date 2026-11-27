@@ -1,10 +1,11 @@
 param([switch]$Revert)
-# Apply (or revert) the no-reasoning patch to the installed Strata 0.1.69 server.
-# Originals are kept in .\backup\*.orig.  `strata update` replaces serve\ and undoes this.
+# Apply (or revert) the no-reasoning patch to the installed Strata server.
+# `terminal\current` follows a `strata update` to the new version's serve\ folder.
+# Before the first patch each file is kept beside itself as <name>.pre-no-reasoning.
+# The 0.1.69 originals in .\backup\*.orig are history, not a revert source for a newer build.
 
 $ErrorActionPreference = 'Stop'
-$serve  = 'C:\Users\viktor\AppData\Local\Strata\terminal\0.1.69\serve'
-$backup = Join-Path $PSScriptRoot 'backup'
+$serve  = 'C:\Users\viktor\AppData\Local\Strata\terminal\current\serve'
 $front  = Join-Path $serve 'frontend.py'
 $tpl    = Join-Path $serve 'chat_template.jinja'
 $enc    = New-Object System.Text.UTF8Encoding($false)
@@ -13,9 +14,14 @@ function Read-Text($path) { [IO.File]::ReadAllText($path) }
 function Write-Text($path, $text) { [IO.File]::WriteAllText($path, $text, $enc) }
 
 if ($Revert) {
-    Copy-Item (Join-Path $backup 'frontend.py.orig') $front -Force
-    Copy-Item (Join-Path $backup 'chat_template.jinja.orig') $tpl -Force
-    Write-Output 'reverted serve\frontend.py and serve\chat_template.jinja from .\backup'
+    foreach ($file in @($front, $tpl)) {
+        $pre = "$file.pre-no-reasoning"
+        if (-not (Test-Path $pre)) {
+            throw "$file was not patched by this script (no $pre); restore it with 'strata update' or the component repair instead of copying an older build's file."
+        }
+        Copy-Item $pre $file -Force
+    }
+    Write-Output 'reverted serve\frontend.py and serve\chat_template.jinja from their .pre-no-reasoning copies'
     exit 0
 }
 
@@ -43,6 +49,7 @@ $anthropicNew = @"
     return _env_to_user(_late_system_to_user(messages)), tools, kwargs
 "@
 if ($frontText -notmatch 'no-reasoning patch') {
+    if (-not (Test-Path "$front.pre-no-reasoning")) { Copy-Item $front "$front.pre-no-reasoning" -Force }
     if (-not $frontText.Contains($openaiAnchor)) { throw 'frontend.py: OpenAI anchor not found (a different Strata build?)' }
     if (-not $frontText.Contains($anthropicAnchor)) { throw 'frontend.py: Anthropic anchor not found (a different Strata build?)' }
     $frontText = $frontText.Replace($openaiAnchor, $openaiNew).Replace($anthropicAnchor, $anthropicNew)
@@ -52,6 +59,7 @@ if ($frontText -notmatch 'no-reasoning patch') {
 
 # 2) chat_template.jinja: the template can no longer think even if a caller forgets to pass the flag.
 if ($tplText -notmatch 'set enable_thinking = false') {
+    if (-not (Test-Path "$tpl.pre-no-reasoning")) { Copy-Item $tpl "$tpl.pre-no-reasoning" -Force }
     $tplAnchor = @"
 {%- endif %}
 {%- set sysns = namespace(count=0, text='') %}
