@@ -366,30 +366,54 @@ Not measured beyond starting attempts.
 
 ## strata/run-iq3_s-coding-noreason.bat
 
-Starts the installed Strata server in the foreground with this repository's run config
-(strata/qwen3.8-flash-next-iq3_s.coding-noreason.json): Qwen3.8-Flash-Next IQ3_S on both RTX 5060 Ti,
+Starts Strata through its own launcher, `terminal\current\bin\strata.cmd launch --preset "IQ3_S 200K"`:
+the preset starts the model and opens the terminal monitor (Overview, Serving, Requests, Engine,
+Hardware, Logs, Connect) that `strata launch` shows. Qwen3.8-Flash-Next IQ3_S on both RTX 5060 Ti,
 context 204800, kv int8, DFlash2 alone (--draft-conf 0.35, draft_vocab_en.bin), no reasoning,
 sampling 0.6 / 0.8 / 20 / min_p 0 / penalties 0 / seed 1 (README.md sections 3-5).
 
-The command is `terminal\current\bin\strata.cmd serve --profile <that config>`, so the `current`
-junction follows a `strata update` to the new version. The config's `cwd` is `terminal\current` for the
-same reason, and its engine log is `strata/iq3_s-coding-noreason.engine.log`, not the launcher's log.
-The config is written by `strata/apply_final_config.py`, which also puts the same settings into
-`%LOCALAPPDATA%\Strata\install\strata-iq3_s.json` (the base of every `strata launch`).
+The parameters come from the installed run config `%LOCALAPPDATA%\Strata\install\strata-iq3_s.json`,
+which every `strata launch` uses as its base; `strata/apply_final_config.py` keeps it in sync with
+`strata/qwen3.8-flash-next-iq3_s.coding-noreason.json`. That repository copy is documentation for this
+launch file (it no longer reads the file itself).
 
 Both paths in the script are absolute on purpose, as in the installer's run-iq3_s.bat. A launcher that
 pipes the .bat into cmd.exe (some IDE "run" buttons) never expands `%~dp0`: it reaches the line as the
-literal text `%~dp0`, the profile path becomes `%~dp0qwen3.8-flash-next-iq3_s.coding-noreason.json`, and
-Strata ends the start with "cannot read run config (FileNotFoundError)". Moving the repository means
-editing the `cd /d` and `--profile` paths.
+literal text `%~dp0`, and the call fails before Strata is reached. Moving the repository means editing
+the `cd /d` path.
+
+The server is an instance of `strata launch` / `strata runtime`: stop it from the monitor's `q`
+("keep serving or stop") or with `strata launch --stop --preset "IQ3_S 200K"`; the second leaves the
+monitor window open, close it by hand. Logs:
+`...\Local\Strata\launch\iq3_s-200k.engine.log` and `...\Local\Strata\runtime\launch-iq3_s-200k.server.log`.
+
+If the same choices already serve, `strata launch` prints the address and does not open the monitor:
+use `strata monitor --url http://127.0.0.1:8080`. If other choices serve, it asks once; without a
+screen (a piped launcher) that start refuses, and `--restart` stops the running session first.
 
 No-reasoning needs `strata/patches/apply-no-reasoning.ps1` applied to the installed serve\ files
 (strata/README.md section 4). Without the patch, `reasoning_effort: none` only covers requests that
-do not ask for thinking; a client that sends `thinking` gets its own level back.
+do not ask for thinking; a client that sends `thinking` gets its own level back. `strata update` does
+not touch this .bat, the preset or the installed config, but it does replace serve\: re-run the patch
+after an update.
 
-The server runs in the foreground: Ctrl+C or closing the window stops it. It is not a `strata runtime`
-instance, so `strata launch --stop` does not stop it. Port 8080, one server at a time; `if errorlevel 1
-pause` keeps the window open when the start fails.
+Not benchmarked separately: the `final` run in strata/README.md section 5 is this exact configuration.
 
-Not benchmarked separately: the `final` run in strata/README.md section 5 is this exact config, started
-through `strata launch --preset "IQ3_S 200K"`.
+## strata/run-iq3_s-coding-noreason.ps1
+
+The PowerShell form of the .bat above: `terminal\current\bin\strata.cmd launch --preset "IQ3_S 200K"`,
+so the same preset, the same dashboard and the same parameters (the installed run config
+`%LOCALAPPDATA%\Strata\install\strata-iq3_s.json`, kept in sync by `strata/apply_final_config.py`).
+The working folder is `$PSScriptRoot`; when PowerShell runs the file from a pipe `$PSScriptRoot` is
+empty, and the hard-coded fallback `C:\MyProjecs\llamacpp\strata` is used. Moving the repository means
+editing that fallback.
+
+Stop from the monitor's `q` ("keep serving or stop") or with `strata launch --stop --preset "IQ3_S 200K"`;
+the second leaves the monitor window open. Logs are the same as the .bat's:
+`...\Local\Strata\launch\iq3_s-200k.engine.log` and
+`...\Local\Strata\runtime\launch-iq3_s-200k.server.log`.
+
+If the execution policy blocks local scripts, run it as
+`powershell -NoProfile -ExecutionPolicy Bypass -File strata\run-iq3_s-coding-noreason.ps1`.
+The no-reasoning patch (`strata/patches/apply-no-reasoning.ps1`) is required in the same way as for
+the .bat; `strata update` replaces serve\ and the patch must be applied again.

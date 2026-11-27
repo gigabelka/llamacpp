@@ -16,7 +16,8 @@
 | --- | --- |
 | **Итоговый конфиг модели (source of truth)** | `C:\Users\viktor\AppData\Local\Strata\install\strata-iq3_s.json` |
 | Копия конфига для запуска и документации | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json` |
-| **Файл запуска (foreground)** | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.bat` |
+| **Файл запуска (с дашбордом `strata launch`)** | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.bat` |
+| Файл запуска PowerShell (то же самое) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.ps1` |
 | Бэкап конфига до правки | `c:\MyProjecs\llamacpp\strata\backup\strata-iq3_s.json.before-final` |
 | Бэкап исходного конфига | `c:\MyProjecs\llamacpp\strata\backup\strata-iq3_s.json.orig` |
 | Скрипт установки/запуска | `C:\Users\viktor\AppData\Local\Strata\install\run-iq3_s.bat` |
@@ -175,10 +176,14 @@ no-reasoning, DFlash2 (кроме b7/b8/b11). 3 coding-промпта × 2 по�
 ## 7. Как пользоваться
 
 ```powershell
-# запуск из этой папки (foreground; своя копия конфига, свой лог движка)
+# запуск из этой папки: сервер + TUI-дашборд, как у strata launch
 strata\run-iq3_s-coding-noreason.bat
+powershell -NoProfile -ExecutionPolicy Bypass -File strata\run-iq3_s-coding-noreason.ps1
 
-# либо штатный путь через пресет (база — install\strata-iq3_s.json)
+# headless-вариант (без монитора), если нужен только сервер
+strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json
+
+# штатный путь через пресет (база — install\strata-iq3_s.json), без монитора
 strata launch --preset "IQ3_S 200K" --no-tui
 
 # статус / остановка
@@ -197,15 +202,30 @@ python -I c:\MyProjecs\llamacpp\strata\bench\make_configs.py `
   c:\MyProjecs\llamacpp\strata\bench\configs
 ```
 
-`run-iq3_s-coding-noreason.bat` держит сервер в переднем плане: Ctrl+C или закрытие окна его
-останавливает. Это не инстанс `strata runtime`, поэтому `strata launch --stop` его не остановит.
-В копии конфига `cwd` = `terminal\current` (переживает обновление), а `log` =
-`strata\iq3_s-coding-noreason.engine.log`; остальные поля совпадают с установленным конфигом.
+`run-iq3_s-coding-noreason.bat` вызывает `strata launch --preset "IQ3_S 200K"`: сервер запускается
+как инстанс `strata runtime` и открывается тот же монитор, что и при обычном `strata launch`
+(Overview / Serving / Requests / Engine / Hardware / Logs / Connect). Остановка — `q` в мониторе
+(«keep serving or stop») или `strata launch --stop --preset "IQ3_S 200K"`; во втором случае окно
+монитора остаётся открытым и его надо закрыть вручную. Логи этого запуска:
+`...\Local\Strata\launch\iq3_s-200k.engine.log` и
+`...\Local\Strata\runtime\launch-iq3_s-200k.server.log`.
 
-В `.bat` оба пути к папке/конфигу **абсолютные**, как в установочном `run-iq3_s.bat`: раннер,
-который передаёт файл в `cmd` через поток, не раскрывает `%~dp0` (он доходит литералом), и Strata
-падает с `cannot read run config (FileNotFoundError)`. При переносе репозитория поправить `cd /d`
-и `--profile` в файле.
+Параметры берутся из установленного конфига `install\strata-iq3_s.json` (его использует каждый
+`strata launch`); `apply_final_config.py` держит его синхронным с копией
+`strata\qwen3.8-flash-next-iq3_s.coding-noreason.json`. Копия — документация и источник для
+headless-запуска `strata serve --profile`, сам `.bat` её больше не читает.
+
+Если те же настройки уже обслуживаются, `strata launch` печатает адрес и монитор не открывает —
+тогда дашборд вручную: `strata monitor --url http://127.0.0.1:8080`. Если обслуживаются другие
+настройки, `launch` спросит про перезапуск; в неинтерактивном запуске нужен `--restart` (он
+остановит текущую сессию).
+
+В `.bat` путь к папке **абсолютный**, как в установочном `run-iq3_s.bat`: раннер, который передаёт
+файл в `cmd` через поток, не раскрывает `%~dp0` (он доходит литералом), и Strata падает с
+`cannot read run config (FileNotFoundError)`. При переносе репозитория поправить `cd /d` в файле.
+В `.ps1` папка берётся из `$PSScriptRoot`; если он пуст (запуск через поток), срабатывает
+абсолютный fallback `C:\MyProjecs\llamacpp\strata`. Если политика запрещает локальные скрипты —
+запускать с `-ExecutionPolicy Bypass`, как в команде выше.
 
 Применить конфиг заново после сброса: `python -I strata\apply_final_config.py`.
 Откатить конфиг: скопировать `strata\backup\strata-iq3_s.json.before-final` в
