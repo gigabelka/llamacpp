@@ -17,7 +17,7 @@
 | **Итоговый конфиг модели (source of truth)** | `C:\Users\viktor\AppData\Local\Strata\install\strata-iq3_s.json` |
 | Копия конфига для запуска и документации | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json` |
 | Конфиг режима с размышлениями | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json` |
-| **Запуск режима с размышлениями** (foreground, веб-UI) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-reason.bat` |
+| **Запуск режима с размышлениями** (сервер + TUI-дашборд) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-reason.bat` |
 | Лог движка режима с размышлениями | `c:\MyProjecs\llamacpp\strata\iq3_s-coding-reason.engine.log` |
 | **Файл запуска (с дашбордом `strata launch`)** | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.bat` |
 | Файл запуска PowerShell (то же самое) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.ps1` |
@@ -189,11 +189,12 @@ no-reasoning, DFlash2 (кроме b7/b8/b11). 3 coding-промпта × 2 по�
 strata\run-iq3_s-coding-noreason.bat
 powershell -NoProfile -ExecutionPolicy Bypass -File strata\run-iq3_s-coding-noreason.ps1
 
-# режим с размышлениями: сервер в foreground, веб-UI на http://127.0.0.1:8080
+# режим с размышлениями: сервер в отдельном окне + TUI-дашборд, API на http://127.0.0.1:8080
 strata\run-iq3_s-coding-reason.bat
-# то же вручную (переменная обязательна, иначе патч выключит мышление)
+# то же вручную, в двух окнах (переменная обязательна, иначе патч выключит мышление)
 set STRATA_ALLOW_THINKING=1
-strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json
+start "Strata engine IQ3_S reason" cmd /k strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json
+strata monitor --url http://127.0.0.1:8080
 
 # headless-вариант (без монитора), если нужен только сервер
 strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json
@@ -296,11 +297,18 @@ headless-запуска `strata serve --profile`, сам `.bat` её больш�
 | Проверка API | `strata\bench\verify_reasoning_api.py` |
 | Проверка кэша при смене уровня | `strata\bench\check_effort_cache.py` |
 
-`.bat` делает `set STRATA_ALLOW_THINKING=1` и `strata serve --profile` — сервер в foreground,
-веб-UI `http://127.0.0.1:8080`, остановка Ctrl+C. Через `strata launch --preset` этот режим не
-запустить: пресет один на модель и каждый запуск пересобирает конфиг из
-`install\strata-iq3_s.json`, где `reasoning_effort: none`; два пресета с разным мышлением на одну
-модель не сосуществуют. Одновременно живёт только один режим (порт 8080 и обе карты).
+`.bat` делает `set STRATA_ALLOW_THINKING=1`, поднимает `strata serve --profile` в отдельном
+титулованном окне (`start … cmd /k`, чтобы ошибка старта оставалась на экране) и открывает в
+своём окне дашборд `strata monitor --url http://127.0.0.1:8080` — те же семь экранов
+(Overview / Serving / Requests / Engine / Hardware / Logs / Connect), что и у `strata launch`;
+веб-UI и API остаются на `http://127.0.0.1:8080`. Пока движок грузится, монитор пишет, что сервер
+недоступен, и повторяет попытки (`strata serve` поднимает HTTP только после готовности движка);
+`r` — повторить сразу. `q` в мониторе только отцепляет, модель продолжает работать; остановка —
+Ctrl+C в окне движка или закрыть его. Через `strata launch --preset` этот режим не запустить:
+пресет один на модель и каждый запуск пересобирает конфиг из `install\strata-iq3_s.json`, где
+`reasoning_effort: none`; два пресета с разным мышлением на одну модель не сосуществуют.
+Одновременно живёт только один режим (порт 8080 и обе карты); если 8080 уже занят, окно движка
+сразу покажет `port 8080 is already in use`, а дашборд будет показывать уже запущенный сервер.
 
 Патч `serve\` (§4) стал гейтом: без `STRATA_ALLOW_THINKING` оба слоя жёстко выключают `<think>` —
 noreason-пресет, `install\run-iq3_s.bat` и обычный `strata launch` ведут себя как раньше.

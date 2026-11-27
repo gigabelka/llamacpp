@@ -430,13 +430,38 @@ thinking ON at the template's `xhigh` level and the model-card sampler set
 
 It does **not** use `strata launch --preset`. The preset (and `strata launch` itself) rebuilds the
 engine config from the single installed model config `%LOCALAPPDATA%\Strata\install\strata-iq3_s.json`,
-which holds `reasoning_effort: none`, so two presets on one model cannot differ in thinking. Instead
-the script starts the server in the foreground from its own run config with
-`strata serve --profile strata\qwen3.8-flash-next-iq3_s.coding-reason.json`: web UI and the
-OpenAI/Anthropic APIs on http://127.0.0.1:8080, no TUI monitor. Stop it with Ctrl+C in its console
-(or close the window); `strata monitor --url http://127.0.0.1:8080` attaches the dashboard of
-`strata launch` if wanted. Engine log: `strata\iq3_s-coding-reason.engine.log`; the server's own
-output stays in the console.
+which holds `reasoning_effort: none` and the 0.6/0.8 samplers, so two presets on one model cannot
+differ in thinking. Instead the script starts the server from its own run config with
+`strata serve --profile strata\qwen3.8-flash-next-iq3_s.coding-reason.json` and attaches the same
+dashboard to it, in two console windows:
+
+- `start "Strata engine IQ3_S reason" cmd /k call ... serve --profile ...` opens a titled console of
+  its own. `cmd /k` keeps it open when the server ends, so a refused start (port 8080 taken, a bad
+  config) stays readable instead of vanishing with the window. `start` inherits the environment, so
+  the child sees `STRATA_ALLOW_THINKING=1` — the patch gate reads the variable from the server
+  process. The load progress, the `ready:` line and later request errors appear there; Ctrl+C in
+  that window (or closing it) stops the model.
+- the script's own window then runs `strata monitor --url http://127.0.0.1:8080`: the same seven
+  screens `strata launch` opens (Overview / Serving / Requests / Engine / Hardware / Logs /
+  Connect). `--url` is required — the monitor's default address is `http://127.0.0.1:8095`
+  (strata_cli/connections.py), and a `serve` session is not a launch it could discover.
+  Telemetry needs no key here: a local bind is open when the config sets neither `api_key` nor a
+  telemetry key (serve/server.py:7458-7466). `strata serve` binds HTTP only once the engine is
+  ready (serve/server.py:9917), so at first the monitor reports that it cannot reach the server
+  and retries with backoff (up to 30 s); `r` forces a retry. `q` here only detaches — nothing was
+  started by the monitor command, so there is no "keep serving or stop" question (`ask_quit=False`,
+  strata_cli/launch/monitor_ext.py:160-161); the model keeps serving and the script's window
+  closes. Stopping the model is done in the engine window.
+
+A piped launcher (an IDE "run" button, no TTY) gets `interactive monitor needs a terminal` from the
+monitor (exit 2) and the script pauses on it; start the file from a normal console. If anything
+already serves port 8080, the server refuses within its first seconds — the check runs before the
+engine load — with `port 8080 is already in use` in the engine window, and the dashboard then
+shows the server that was already there (possibly the noreason one), so check the engine window,
+not only the dashboard.
+
+Engine log: `strata\iq3_s-coding-reason.engine.log`; the server's own output stays in its console.
+Only one configuration runs at a time, as before: they share port 8080 and both cards.
 
 The `set` line sets `STRATA_ALLOW_THINKING=1`. The reworked no-reasoning patch
 (`strata/patches/apply-no-reasoning.ps1`) reads that variable in both request dialects and passes it
