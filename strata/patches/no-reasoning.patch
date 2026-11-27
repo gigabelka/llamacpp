@@ -1,0 +1,30 @@
+diff --git a/serve/frontend.py b/serve/frontend.py
+--- a/serve/frontend.py
++++ b/serve/frontend.py
+@@ -742,6 +742,7 @@ def openai_to_messages(req: dict) -> tuple[list[dict], list[dict] | None, dict]:
+             kwargs = {"enable_thinking": False}
+         elif k in ("reasoning_effort", "thinking_mode") and "enable_thinking" not in kwargs:
+             kwargs.update(effort_kwargs(v))
++    kwargs["enable_thinking"] = False        # no-reasoning patch: every OpenAI request renders without <think>
+     return _env_to_user(_late_system_to_user(messages)), tools, kwargs
+ 
+ 
+@@ -955,6 +956,7 @@ def anthropic_to_messages(req: dict, think_unasked: bool = True) -> tuple[list[d
+         # A config's reasoning_effort still applies: Service.with_shared sets output_config before this runs.  A
+         # request that gives its own reasoning_budget_tokens (#123) asks for thinking, so it thinks as before.
+         kwargs["enable_thinking"] = False
++    kwargs["enable_thinking"] = False        # no-reasoning patch: every Anthropic request renders without <think>
+     return _env_to_user(_late_system_to_user(messages)), tools, kwargs
+ 
+ 
+diff --git a/serve/chat_template.jinja b/serve/chat_template.jinja
+--- a/serve/chat_template.jinja
++++ b/serve/chat_template.jinja
+@@ -42,6 +42,7 @@
+ {%- if not messages %}
+     {{- raise_exception('No messages provided.') }}
+ {%- endif %}
++{%- set enable_thinking = false %}
+ {%- set sysns = namespace(count=0, text='') %}
+ {%- for message in messages %}
+     {%- if sysns.count == loop.index0 and (message.role == 'system' or message.role == 'developer') %}

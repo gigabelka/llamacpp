@@ -1,0 +1,40 @@
+{
+  "short": [
+    {
+      "id": "merge_intervals",
+      "system": "You are a senior Python engineer. Answer with code and a short explanation.",
+      "user": "Write a Python function merge_intervals(intervals) that merges overlapping closed integer intervals and returns them sorted. Handle empty input and single-element input. Include type hints and two doctests.",
+      "max_tokens": 512
+    },
+    {
+      "id": "bug_binary_search",
+      "system": "You are a senior Python engineer. Answer with code and a short explanation.",
+      "user": "This binary search is wrong for some inputs. Find the bug, explain it in one paragraph, and give the corrected function with tests:\n\ndef search(a, x):\n    lo, hi = 0, len(a)\n    while lo < hi:\n        mid = (lo + hi) // 2\n        if a[mid] < x:\n            lo = mid\n        else:\n            hi = mid\n    return lo if lo < len(a) and a[lo] == x else -1\n",
+      "max_tokens": 512
+    },
+    {
+      "id": "lru_cache",
+      "system": "You are a senior Python engineer. Answer with code and a short explanation.",
+      "user": "Implement an LRU cache class in pure Python with O(1) get and put, capacity in the constructor, and a method to return the current keys from most to least recently used. Do not use functools or collections.OrderedDict.",
+      "max_tokens": 512
+    }
+  ],
+  "depth": {
+    "id": "depth16k",
+    "system": "You are a senior Python engineer.",
+    "user_prefix": "The following is a numbered list of small Python utility functions from a project. Read it, then answer the question at the end.\n\n",
+    "line": "def util_{n}(x: int) -> int:\n    return x * {n} + {m}\n\n",
+    "lines": 700,
+    "question": "\nQuestion: what does util_137 return for x=2? Answer with one expression only.",
+    "max_tokens": 256
+  },
+  "prefill": {
+    "id": "prefill90k",
+    "system": "You are a senior Python engineer.",
+    "user_prefix": "The following is a long excerpt of generated Python source. Read it, then answer the question at the end.\n\n",
+    "line": "def handler_{n}(request):\n    value = request.get('k{n}', {m})\n    if value % 7 == 0:\n        return {{'n': {n}, 'value': value}}\n    return None\n\n",
+    "lines": 3200,
+    "question": "\nQuestion: in handler_2711, what is the default of k2711? Answer with one number only.",
+    "max_tokens": 16
+  }
+}

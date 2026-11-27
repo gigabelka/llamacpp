@@ -1,0 +1,228 @@
+{
+ "variant": "b1",
+ "model": "qwen3.8-flash-next-iq3_s",
+ "url": "http://127.0.0.1:8080",
+ "config": "c:\\MyProjecs\\llamacpp\\strata\\bench\\configs\\b1.json",
+ "started": "2026-11-27T07:26:21.676265+00:00",
+ "cases": [
+  {
+   "ttft_s": 0.474,
+   "wall_s": 0.534,
+   "prompt_tokens": 17,
+   "cached_tokens": 0,
+   "completion_tokens": 2,
+   "decode_tps": 1999999.3,
+   "prefill_tps": 35.8,
+   "reasoning_chars": 0,
+   "content_chars": 5,
+   "content_sha256": "c2e3ac47f4a325469c1a2d5f117e463ec943c721986d5d9f09ac4540b7d80526",
+   "content_preview": "READY",
+   "case": "warmup",
+   "max_tokens": 8
+  },
+  {
+   "ttft_s": 0.583,
+   "wall_s": 3.643,
+   "prompt_tokens": 69,
+   "cached_tokens": 0,
+   "completion_tokens": 298,
+   "decode_tps": 97.4,
+   "prefill_tps": 118.3,
+   "reasoning_chars": 0,
+   "content_chars": 1003,
+   "content_sha256": "d4428a798df564c0e69d44b193f6a148a49488e5033c1884b6e1a22f9d42dfce",
+   "content_preview": "```python\ndef merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:\n    \"\"\"\n    Merge overlapping closed integer intervals and return them sorted.\n    \n    >>> merge_intervals([(1, 3), (2, 6), (8, 10), (15, 18)])\n    [(1, 6), (8, 10), (15, 18)]\n    >>> merge_intervals([(1, 4), (4, 5)])\n    [(1, 5)]\n    \"\"\"\n    if not intervals:\n        return []\n    \n    # Sort intervals by s",
+   "case": "merge_intervals#1",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.058,
+   "wall_s": 2.388,
+   "prompt_tokens": 69,
+   "cached_tokens": 62,
+   "completion_tokens": 293,
+   "decode_tps": 125.4,
+   "prefill_tps": 1187.2,
+   "reasoning_chars": 0,
+   "content_chars": 1022,
+   "content_sha256": "6ff0eb0be0334323c475e0cbd7ac19e2c09c51c04dbcc7ac5ca916a6a1e717b4",
+   "content_preview": "```python\ndef merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:\n    \"\"\"\n    Merge overlapping closed integer intervals and return them sorted.\n    \n    >>> merge_intervals([(1, 3), (2, 6), (8, 10), (15, 18)])\n    [(1, 6), (8, 10), (15, 18)]\n    >>> merge_intervals([(1, 4), (4, 5)])\n    [(1, 5)]\n    \"\"\"\n    if not intervals:\n        return []\n    \n    # Sort intervals by s",
+   "case": "merge_intervals#2",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.797,
+   "wall_s": 5.603,
+   "prompt_tokens": 140,
+   "cached_tokens": 0,
+   "completion_tokens": 512,
+   "decode_tps": 106.6,
+   "prefill_tps": 175.6,
+   "reasoning_chars": 0,
+   "content_chars": 1534,
+   "content_sha256": "529454238dc033a3d0e715ecf3d11465181fdddd088c31a8083fb8b5bda6a40b",
+   "content_preview": "### Bug Explanation\nThe bug lies in the update logic for the `lo` variable: `lo = mid` instead of `lo = mid + 1`. In standard binary search, when `a[mid] < x`, the current `mid` is definitely not the target, so the search range must exclude it by setting `lo = mid + 1`. By setting `lo = mid`, the search range does not shrink when `mid == lo` (which happens when `hi == lo + 1`), causing an infinite",
+   "case": "bug_binary_search#1",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.075,
+   "wall_s": 4.325,
+   "prompt_tokens": 140,
+   "cached_tokens": 133,
+   "completion_tokens": 512,
+   "decode_tps": 120.3,
+   "prefill_tps": 1873.0,
+   "reasoning_chars": 0,
+   "content_chars": 1218,
+   "content_sha256": "0ffd0726f564a884caaadf28b2eeabedace0ff8f1b07e53604021a53b6eb69e8",
+   "content_preview": "The bug is in the line `lo = mid`. In binary search, when the search range is defined as `[lo, hi)`, updating `lo` to `mid` instead of `mid + 1` can cause an infinite loop when `lo + 1 == hi`. For example, if `lo=0` and `hi=1`, `mid` becomes 0. If `a[0] < x`, `lo` is set to 0 again, and the condition `lo < hi` remains true, causing the loop to never terminate. The correct update should be `lo = mi",
+   "case": "bug_binary_search#2",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.732,
+   "wall_s": 4.503,
+   "prompt_tokens": 80,
+   "cached_tokens": 0,
+   "completion_tokens": 512,
+   "decode_tps": 135.9,
+   "prefill_tps": 109.3,
+   "reasoning_chars": 0,
+   "content_chars": 1965,
+   "content_sha256": "f2dd368bd817887858b59512dfce111c243f2a4c92b7c7d076f9425d39e2d8f8",
+   "content_preview": "```python\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.capacity = capacity\n        self.cache = {}  # key -> (value, node)\n        # Doubly linked list nodes: {key: node}\n        # Each node: {'key': key, 'value': value, 'prev': prev_node, 'next': next_node}\n        self.head = None  # Most recently used\n        self.tail = None  # Least recently used\n        self.nodes = {}",
+   "case": "lru_cache#1",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.071,
+   "wall_s": 4.2,
+   "prompt_tokens": 80,
+   "cached_tokens": 73,
+   "completion_tokens": 512,
+   "decode_tps": 123.9,
+   "prefill_tps": 1130.2,
+   "reasoning_chars": 0,
+   "content_chars": 2077,
+   "content_sha256": "dc74e5880fea4ec9df6ab490902f8f1ba7dd4f6d9f4119b888fa47cb8008ee21",
+   "content_preview": "```python\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.capacity = capacity\n        self.cache = {}  # key -> value\n        self.order = []  # list of keys, least recently used at index 0, most recently used at end\n        # For O(1) removal from order, we need a way to quickly remove an element.\n        # Using a list for order doesn't give O(1) removal. We need a doubly lin",
+   "case": "lru_cache#2",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 9.676,
+   "wall_s": 9.852,
+   "prompt_tokens": 19790,
+   "cached_tokens": 0,
+   "completion_tokens": 12,
+   "decode_tps": 70.3,
+   "prefill_tps": 2045.2,
+   "reasoning_chars": 0,
+   "content_chars": 13,
+   "content_sha256": "3ea1ec029d0f07cc00e3ae28cc88bc91bcd6c9e4e94ad503d6e902baed3d75af",
+   "content_preview": "2 * 137 + 412",
+   "case": "depth16k",
+   "max_tokens": 256
+  },
+  {
+   "ttft_s": 70.806,
+   "wall_s": 70.909,
+   "prompt_tokens": 191587,
+   "cached_tokens": 0,
+   "completion_tokens": 5,
+   "decode_tps": 39.1,
+   "prefill_tps": 2705.8,
+   "reasoning_chars": 0,
+   "content_chars": 4,
+   "content_sha256": "16f5fa5ce97e1f40489a2fde3bb4dfb69dc4d621a42a0dc85a942d01570c30b1",
+   "content_preview": "8134",
+   "case": "prefill90k",
+   "max_tokens": 16
+  }
+ ],
+ "config_sha256": "77378b5f00ed305786e27a42c091dc89baf41124938baf8a79f2470b71567281",
+ "drafting": "dflash2",
+ "draft_vocab": null,
+ "sampling": {
+  "temperature": 0.6,
+  "top_p": 0.8,
+  "top_k": 20,
+  "min_p": 0.0,
+  "presence_penalty": 0.0,
+  "frequency_penalty": 0.0,
+  "repetition_penalty": 1.0,
+  "seed": 1
+ },
+ "user_args": [
+  "--draft-conf",
+  "0.35",
+  "--mtp-draft-vocab",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\terminal\\0.1.69\\data\\draft_vocab_en.bin"
+ ],
+ "args": [
+  "--pack",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\packs\\iq3_s",
+  "--native",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\models\\IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+  "--ple-gguf",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\models\\IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+  "--expert-profile",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\terminal\\0.1.69\\data\\expert-profile.bin",
+  "--expert-cache",
+  "auto",
+  "--prefill",
+  "auto",
+  "--spec",
+  "4",
+  "--spec-min-p",
+  "0.5",
+  "--mtp",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\mtp\\rt",
+  "--max-context",
+  "204800",
+  "--kv",
+  "int8"
+ ],
+ "vram_before": [
+  {
+   "index": 0,
+   "used_mib": 13974,
+   "total_mib": 16311,
+   "util_pct": 0
+  },
+  {
+   "index": 1,
+   "used_mib": 13850,
+   "total_mib": 16311,
+   "util_pct": 0
+  }
+ ],
+ "vram_after": [
+  {
+   "index": 0,
+   "used_mib": 13980,
+   "total_mib": 16311,
+   "util_pct": 79
+  },
+  {
+   "index": 1,
+   "used_mib": 13856,
+   "total_mib": 16311,
+   "util_pct": 41
+  }
+ ],
+ "repeatable": {
+  "merge_intervals": false,
+  "bug_binary_search": false,
+  "lru_cache": false
+ },
+ "summary": {
+  "short_decode_median_tps": 122.1,
+  "repeatable_all": false,
+  "reasoning_chars_total": 0,
+  "prefill_90k_tps": 2705.8,
+  "depth16k_decode_tps": 70.3
+ },
+ "finished": "2026-11-27T07:28:07.750790+00:00"
+}

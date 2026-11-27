@@ -1,0 +1,223 @@
+{
+ "variant": "b7",
+ "model": "qwen3.8-flash-next-iq3_s",
+ "url": "http://127.0.0.1:8080",
+ "config": "c:\\MyProjecs\\llamacpp\\strata\\bench\\configs\\b7.json",
+ "started": "2026-11-27T07:42:53.537496+00:00",
+ "cases": [
+  {
+   "ttft_s": 0.227,
+   "wall_s": 0.278,
+   "prompt_tokens": 17,
+   "cached_tokens": 0,
+   "completion_tokens": 2,
+   "decode_tps": 1249999.0,
+   "prefill_tps": 74.8,
+   "reasoning_chars": 0,
+   "content_chars": 5,
+   "content_sha256": "c2e3ac47f4a325469c1a2d5f117e463ec943c721986d5d9f09ac4540b7d80526",
+   "content_preview": "READY",
+   "case": "warmup",
+   "max_tokens": 8
+  },
+  {
+   "ttft_s": 0.585,
+   "wall_s": 6.186,
+   "prompt_tokens": 69,
+   "cached_tokens": 0,
+   "completion_tokens": 310,
+   "decode_tps": 55.4,
+   "prefill_tps": 117.9,
+   "reasoning_chars": 0,
+   "content_chars": 1089,
+   "content_sha256": "21019e467dce67fcc796bc4ea7302324a51ad63a6b3287bb90f2960676a614e2",
+   "content_preview": "```python\nfrom typing import List, Tuple\n\n\ndef merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    \"\"\"\n    Merge overlapping closed integer intervals and return them sorted.\n    \n    Args:\n        intervals: A list of (start, end) tuples representing closed intervals.\n        \n    Returns:\n        A sorted list of merged non-overlapping intervals.\n        \n    >>> merge",
+   "case": "merge_intervals#1",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.087,
+   "wall_s": 4.868,
+   "prompt_tokens": 69,
+   "cached_tokens": 62,
+   "completion_tokens": 310,
+   "decode_tps": 64.9,
+   "prefill_tps": 792.2,
+   "reasoning_chars": 0,
+   "content_chars": 1089,
+   "content_sha256": "21019e467dce67fcc796bc4ea7302324a51ad63a6b3287bb90f2960676a614e2",
+   "content_preview": "```python\nfrom typing import List, Tuple\n\n\ndef merge_intervals(intervals: List[Tuple[int, int]]) -> List[Tuple[int, int]]:\n    \"\"\"\n    Merge overlapping closed integer intervals and return them sorted.\n    \n    Args:\n        intervals: A list of (start, end) tuples representing closed intervals.\n        \n    Returns:\n        A sorted list of merged non-overlapping intervals.\n        \n    >>> merge",
+   "case": "merge_intervals#2",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.789,
+   "wall_s": 7.916,
+   "prompt_tokens": 140,
+   "cached_tokens": 0,
+   "completion_tokens": 512,
+   "decode_tps": 71.7,
+   "prefill_tps": 177.5,
+   "reasoning_chars": 0,
+   "content_chars": 1522,
+   "content_sha256": "80aa1b2abe66c03762e046513461d70478dc87f78b4a23129213e12f3305a60b",
+   "content_preview": "### Bug Explanation\n\nThe bug lies in the line `lo = mid` when `a[mid] < x`. In binary search, if the middle element is strictly less than the target, the target must be in the right half, so the search range should start at `mid + 1`. By setting `lo = mid`, the search range does not shrink when `lo` and `hi` are adjacent (e.g., `lo=0, hi=1`), causing an infinite loop because `mid` will always equa",
+   "case": "bug_binary_search#1",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.072,
+   "wall_s": 6.368,
+   "prompt_tokens": 140,
+   "cached_tokens": 133,
+   "completion_tokens": 461,
+   "decode_tps": 73.3,
+   "prefill_tps": 1937.5,
+   "reasoning_chars": 0,
+   "content_chars": 1300,
+   "content_sha256": "b7ecb14797d8df3403d4d134160c1e4ddb05e8a74f8985cb74056e4117a74e0b",
+   "content_preview": "### Bug Explanation\nThe bug lies in the line `lo = mid` when `a[mid] < x`. In binary search, if the middle element is strictly less than the target, the target must be in the right half, so the new lower bound should be `mid + 1`. By setting `lo = mid`, the search range does not shrink when `lo` and `hi` are adjacent (e.g., `lo=0, hi=1`), causing an infinite loop because `mid` will always equal `l",
+   "case": "bug_binary_search#2",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.76,
+   "wall_s": 9.118,
+   "prompt_tokens": 80,
+   "cached_tokens": 0,
+   "completion_tokens": 503,
+   "decode_tps": 60.2,
+   "prefill_tps": 105.3,
+   "reasoning_chars": 0,
+   "content_chars": 2075,
+   "content_sha256": "caa172af7c69ebcf3e6ad030c2b1068624c4d2bcbdbd8ef3258b962de1cff7a4",
+   "content_preview": "```python\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.capacity = capacity\n        self.cache = {}  # key -> node\n        # Doubly linked list: head = most recently used, tail = least recently used\n        self.head = None\n        self.tail = None\n\n    class _Node:\n        def __init__(self, key, value):\n            self.key = key\n            self.value = value\n            s",
+   "case": "lru_cache#1",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 0.091,
+   "wall_s": 7.914,
+   "prompt_tokens": 80,
+   "cached_tokens": 73,
+   "completion_tokens": 501,
+   "decode_tps": 64.1,
+   "prefill_tps": 883.8,
+   "reasoning_chars": 0,
+   "content_chars": 2073,
+   "content_sha256": "602017c1040f7283d0cc6b1c5fd5412ab7dee05cc908a5ba3f372120a15b5cac",
+   "content_preview": "```python\nclass LRUCache:\n    def __init__(self, capacity: int):\n        self.capacity = capacity\n        self.cache = {}  # key -> node\n        # Doubly linked list: head = most recently used, tail = least recently used\n        self.head = None\n        self.tail = None\n\n    class Node:\n        def __init__(self, key, value):\n            self.key = key\n            self.value = value\n            se",
+   "case": "lru_cache#2",
+   "max_tokens": 512
+  },
+  {
+   "ttft_s": 9.878,
+   "wall_s": 10.254,
+   "prompt_tokens": 19790,
+   "cached_tokens": 0,
+   "completion_tokens": 12,
+   "decode_tps": 32.9,
+   "prefill_tps": 2003.4,
+   "reasoning_chars": 0,
+   "content_chars": 13,
+   "content_sha256": "3ea1ec029d0f07cc00e3ae28cc88bc91bcd6c9e4e94ad503d6e902baed3d75af",
+   "content_preview": "2 * 137 + 412",
+   "case": "depth16k",
+   "max_tokens": 256
+  },
+  {
+   "ttft_s": 69.354,
+   "wall_s": 69.517,
+   "prompt_tokens": 191587,
+   "cached_tokens": 0,
+   "completion_tokens": 5,
+   "decode_tps": 37.9,
+   "prefill_tps": 2762.4,
+   "reasoning_chars": 0,
+   "content_chars": 4,
+   "content_sha256": "16f5fa5ce97e1f40489a2fde3bb4dfb69dc4d621a42a0dc85a942d01570c30b1",
+   "content_preview": "8134",
+   "case": "prefill90k",
+   "max_tokens": 16
+  }
+ ],
+ "config_sha256": "1fd1114d9983b993809202db31c4f04dab8c1028abba3b6cb5b95f8df076622e",
+ "drafting": "off",
+ "draft_vocab": null,
+ "sampling": {
+  "temperature": 0.0,
+  "top_p": 0.8,
+  "top_k": 20,
+  "min_p": 0.0,
+  "presence_penalty": 0.0,
+  "frequency_penalty": 0.0,
+  "repetition_penalty": 1.0,
+  "seed": 1
+ },
+ "user_args": [],
+ "args": [
+  "--pack",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\packs\\iq3_s",
+  "--native",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\models\\IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00001-of-00002.gguf",
+  "--ple-gguf",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\models\\IQ3_S\\Qwen3.8-Flash-Next-GSQ-RCO-IQ3_S-00002-of-00002.gguf",
+  "--expert-profile",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\terminal\\0.1.69\\data\\expert-profile.bin",
+  "--expert-cache",
+  "auto",
+  "--prefill",
+  "auto",
+  "--spec",
+  "4",
+  "--spec-min-p",
+  "0.5",
+  "--mtp",
+  "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\mtp\\rt",
+  "--max-context",
+  "204800",
+  "--kv",
+  "int8"
+ ],
+ "vram_before": [
+  {
+   "index": 0,
+   "used_mib": 13914,
+   "total_mib": 16311,
+   "util_pct": 0
+  },
+  {
+   "index": 1,
+   "used_mib": 13754,
+   "total_mib": 16311,
+   "util_pct": 0
+  }
+ ],
+ "vram_after": [
+  {
+   "index": 0,
+   "used_mib": 13924,
+   "total_mib": 16311,
+   "util_pct": 52
+  },
+  {
+   "index": 1,
+   "used_mib": 13764,
+   "total_mib": 16311,
+   "util_pct": 44
+  }
+ ],
+ "repeatable": {
+  "merge_intervals": true,
+  "bug_binary_search": false,
+  "lru_cache": false
+ },
+ "summary": {
+  "short_decode_median_tps": 64.5,
+  "repeatable_all": false,
+  "reasoning_chars_total": 0,
+  "prefill_90k_tps": 2762.4,
+  "depth16k_decode_tps": 32.9
+ },
+ "finished": "2026-11-27T07:44:56.084553+00:00"
+}
