@@ -61,7 +61,12 @@ if isinstance(cfg.get("args"), list):
     cfg["args"] = merge_args(cfg["args"], USER_ARGS)
     cfg["args_written"] = list(cfg["args"])
 path.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
-COPY.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
+# The copy is the run config of run-iq3_s-coding-noreason.bat: it follows `terminal\current`
+# after an update and writes its own engine log next to the report.
+copy_cfg = json.loads(json.dumps(cfg))
+copy_cfg["cwd"] = r"C:\Users\viktor\AppData\Local\Strata\terminal\current"
+copy_cfg["log"] = str(HERE / "iq3_s-coding-noreason.engine.log")
+COPY.write_text(json.dumps(copy_cfg, indent=1), encoding="utf-8")
 print(f"applied to {path}")
 print(f"copy: {COPY}")
 print(f"backup: {backup}")

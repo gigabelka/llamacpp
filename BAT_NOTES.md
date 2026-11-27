@@ -363,3 +363,33 @@ Claude Code on this script: the provider's CLAUDE_CODE_MAX_CONTEXT_TOKENS + CLAU
   <= 139264 (e.g. 106496 + 32768), not the 229376 + 32768 used for the 262144 scripts, or vLLM rejects long requests.
 Not measured beyond starting attempts.
 ```
+
+## strata/run-iq3_s-coding-noreason.bat
+
+Starts the installed Strata server in the foreground with this repository's run config
+(strata/qwen3.8-flash-next-iq3_s.coding-noreason.json): Qwen3.8-Flash-Next IQ3_S on both RTX 5060 Ti,
+context 204800, kv int8, DFlash2 alone (--draft-conf 0.35, draft_vocab_en.bin), no reasoning,
+sampling 0.6 / 0.8 / 20 / min_p 0 / penalties 0 / seed 1 (README.md sections 3-5).
+
+The command is `terminal\current\bin\strata.cmd serve --profile <that config>`, so the `current`
+junction follows a `strata update` to the new version. The config's `cwd` is `terminal\current` for the
+same reason, and its engine log is `strata/iq3_s-coding-noreason.engine.log`, not the launcher's log.
+The config is written by `strata/apply_final_config.py`, which also puts the same settings into
+`%LOCALAPPDATA%\Strata\install\strata-iq3_s.json` (the base of every `strata launch`).
+
+Both paths in the script are absolute on purpose, as in the installer's run-iq3_s.bat. A launcher that
+pipes the .bat into cmd.exe (some IDE "run" buttons) never expands `%~dp0`: it reaches the line as the
+literal text `%~dp0`, the profile path becomes `%~dp0qwen3.8-flash-next-iq3_s.coding-noreason.json`, and
+Strata ends the start with "cannot read run config (FileNotFoundError)". Moving the repository means
+editing the `cd /d` and `--profile` paths.
+
+No-reasoning needs `strata/patches/apply-no-reasoning.ps1` applied to the installed serve\ files
+(strata/README.md section 4). Without the patch, `reasoning_effort: none` only covers requests that
+do not ask for thinking; a client that sends `thinking` gets its own level back.
+
+The server runs in the foreground: Ctrl+C or closing the window stops it. It is not a `strata runtime`
+instance, so `strata launch --stop` does not stop it. Port 8080, one server at a time; `if errorlevel 1
+pause` keeps the window open when the start fails.
+
+Not benchmarked separately: the `final` run in strata/README.md section 5 is this exact config, started
+through `strata launch --preset "IQ3_S 200K"`.

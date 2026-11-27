@@ -15,7 +15,8 @@
 | что | путь |
 | --- | --- |
 | **Итоговый конфиг модели (source of truth)** | `C:\Users\viktor\AppData\Local\Strata\install\strata-iq3_s.json` |
-| Копия итогового конфига для документации | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json` |
+| Копия конфига для запуска и документации | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json` |
+| **Файл запуска (foreground)** | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.bat` |
 | Бэкап конфига до правки | `c:\MyProjecs\llamacpp\strata\backup\strata-iq3_s.json.before-final` |
 | Бэкап исходного конфига | `c:\MyProjecs\llamacpp\strata\backup\strata-iq3_s.json.orig` |
 | Скрипт установки/запуска | `C:\Users\viktor\AppData\Local\Strata\install\run-iq3_s.bat` |
@@ -174,7 +175,10 @@ no-reasoning, DFlash2 (кроме b7/b8/b11). 3 coding-промпта × 2 по�
 ## 7. Как пользоваться
 
 ```powershell
-# запуск итогового конфига (штатный путь, база — install\strata-iq3_s.json)
+# запуск из этой папки (foreground; своя копия конфига, свой лог движка)
+strata\run-iq3_s-coding-noreason.bat
+
+# либо штатный путь через пресет (база — install\strata-iq3_s.json)
 strata launch --preset "IQ3_S 200K" --no-tui
 
 # статус / остановка
@@ -192,6 +196,16 @@ python -I c:\MyProjecs\llamacpp\strata\bench\make_configs.py `
   C:\Users\viktor\AppData\Local\Strata\install\strata-iq3_s.json `
   c:\MyProjecs\llamacpp\strata\bench\configs
 ```
+
+`run-iq3_s-coding-noreason.bat` держит сервер в переднем плане: Ctrl+C или закрытие окна его
+останавливает. Это не инстанс `strata runtime`, поэтому `strata launch --stop` его не остановит.
+В копии конфига `cwd` = `terminal\current` (переживает обновление), а `log` =
+`strata\iq3_s-coding-noreason.engine.log`; остальные поля совпадают с установленным конфигом.
+
+В `.bat` оба пути к папке/конфигу **абсолютные**, как в установочном `run-iq3_s.bat`: раннер,
+который передаёт файл в `cmd` через поток, не раскрывает `%~dp0` (он доходит литералом), и Strata
+падает с `cannot read run config (FileNotFoundError)`. При переносе репозитория поправить `cd /d`
+и `--profile` в файле.
 
 Применить конфиг заново после сброса: `python -I strata\apply_final_config.py`.
 Откатить конфиг: скопировать `strata\backup\strata-iq3_s.json.before-final` в
