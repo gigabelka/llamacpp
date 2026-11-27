@@ -20,6 +20,8 @@ plus two long-form design docs (in Russian):
 - `*.jinja` — chat templates passed to the server via `--chat-template-file`.
 - `cuda13/*.bat` — the llama.cpp launch scripts.
 - `vllm/*.bat` — the vLLM launch scripts (vLLM inside WSL2, safetensors models).
+- `strata/*.bat` + `strata/*.json` — Qwen3.8-Flash-Next IQ3_S on **Strata Terminal 0.1.69**, a
+  separate product (not llama.cpp, not vLLM); see “Strata” below.
 
 There is no build, no test suite, no linter. "Running" the project means
 executing one of the `.bat` files (see below).
@@ -903,6 +905,55 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
   both cards. Orphaned TP workers hold ~11 GiB each after a crash —
   `wsl -d vllm -- pkill -9 -f vllm`; `pkill -f 'vllm serve'` alone is not
   always enough.
+
+## Strata (Qwen3.8-Flash-Next, not llama.cpp)
+
+`strata/` is a separate product: **Strata Terminal 0.1.69** at
+`C:\Users\viktor\AppData\Local\Strata\` (`terminal\current\bin\strata.cmd`, engine under
+`components\engine\0.1.69-windows-x86_64-cuda-cuda13\`, models under `Strata-data\`). Nothing there
+uses `llama-server.exe`, vLLM, the `-c`/`-ts`/`-ctk` knobs or `CALCULATE.md`; `strata/README.md`
+(Russian) is the full report and `BAT_NOTES.md` has the per-script notes.
+
+Two configurations of the same model (Qwen3.8-Flash-Next IQ3_S, context 204800, `kv int8`, DFlash2
+alone, both RTX 5060 Ti), chosen by which `.bat` is started — one server at a time, port 8080:
+
+- `strata/run-iq3_s-coding-noreason.bat` → `strata launch --preset "IQ3_S 200K"`, which rebuilds the
+  engine config from the single installed model config `install\strata-iq3_s.json`.
+  Sampling 0.6/0.8, thinking hard off.
+- `strata/run-iq3_s-coding-reason.bat` → `strata serve --profile
+  strata\qwen3.8-flash-next-iq3_s.coding-reason.json` with `STRATA_ALLOW_THINKING=1`. Sampling
+  1.0/0.95/20 (the card's thinking set), level `high` (= the template's `xhigh`) by default.
+  It cannot use `strata launch`: a preset is per model, and `launch` always starts from the
+  installed config, so two presets cannot differ in thinking.
+
+Thinking is off unless the **server process** sees `STRATA_ALLOW_THINKING=1`. Our patch
+`strata/patches/apply-no-reasoning.ps1` edits `terminal\current\serve\frontend.py` (both dialects)
+and `chat_template.jinja`: without the variable it forces `enable_thinking=False` and the template
+closes the `<think>` block; with it, the template may think. `strata update` replaces `serve\`, so
+re-run the patch after an update (the script is idempotent and upgrades the older unconditional
+form; `-Revert` restores `.pre-no-reasoning`).
+
+Reasoning config keys: `reasoning_effort` takes `none|low|medium|high` only (`xhigh` is refused at
+startup; `high` is the template's xhigh) and is the default for requests that name none. A request
+wins: OpenAI `reasoning_effort` / `chat_template_kwargs {"enable_thinking": false}`; Anthropic
+`output_config.effort`, `thinking` (budget→low/medium/high, `disabled`→off). `effort_position: "end"`
+renders a non-default level as a short system turn before the answer (`--tail-role-token`), so
+switching level keeps the prompt cache (measured: 11 100 of 11 135 tokens reused vs 0 on `start`).
+`anthropic_thinking: "on_request"` does **not** suppress an
+unasked request when a config level is set: `Service.with_shared` fills `output_config` first, so
+the request thinks at the config level. With `max_tokens ≥ 1024` and no explicit budget, Strata
+closes thinking at `max_tokens − clamp(max_tokens/4, 512, max_tokens/2)` to leave the answer room
+(`answer_room`, on by default). Output: `reasoning_content` (OpenAI) / `thinking` blocks
+(Anthropic). A legacy `<config>.shared-settings.json` beside the config overrides the level — do not
+leave one when measuring.
+
+Bench: `strata/bench/bench.py` against `/v1/chat/completions`; `--effort` sends `reasoning_effort`,
+`--max-tokens-{short,depth,prefill}` raise the output budget (thinking spends it), and
+`decode_tps_all` counts reasoning tokens too (`decode_tps` is the visible answer only and is
+meaningless with thinking). A/B configs come
+from `strata/bench/make_configs.py <base> <out> [--family reason]`; `verify_reasoning_api.py` checks
+the levels/blocks on a running server, `check_effort_cache.py` the level-switch cache. Harness
+provider: `CC-Switch.md`.
 
 ## Chat templates
 

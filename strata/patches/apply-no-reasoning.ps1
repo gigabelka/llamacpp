@@ -3,6 +3,12 @@ param([switch]$Revert)
 # `terminal\current` follows a `strata update` to the new version's serve\ folder.
 # Before the first patch each file is kept beside itself as <name>.pre-no-reasoning.
 # The 0.1.69 originals in .\backup\*.orig are history, not a revert source for a newer build.
+#
+# Thinking is OFF by default and ON only when the server process sees STRATA_ALLOW_THINKING=1.
+# strata\run-iq3_s-coding-reason.bat sets that variable; nothing else does, so the noreason
+# preset, install\run-iq3_s.bat and plain `strata launch` keep the behaviour documented in
+# strata\README.md section 4. The gate is in both layers: frontend.py (both dialects) and
+# chat_template.jinja (which cannot think unless frontend.py passes the flag).
 
 $ErrorActionPreference = 'Stop'
 $serve  = 'C:\Users\viktor\AppData\Local\Strata\terminal\current\serve'
@@ -12,6 +18,7 @@ $enc    = New-Object System.Text.UTF8Encoding($false)
 
 function Read-Text($path) { [IO.File]::ReadAllText($path) }
 function Write-Text($path, $text) { [IO.File]::WriteAllText($path, $text, $enc) }
+function LF($text) { $text -replace "`r`n", "`n" }
 
 if ($Revert) {
     foreach ($file in @($front, $tpl)) {
@@ -28,51 +35,101 @@ if ($Revert) {
 $frontText = Read-Text $front
 $tplText   = Read-Text $tpl
 $changed   = @()
+$return = '    return _env_to_user(_late_system_to_user(messages)), tools, kwargs'
 
-# 1) frontend.py: force enable_thinking=False for both request dialects before the template kwargs leave.
-$openaiAnchor = @"
-            kwargs.update(effort_kwargs(v))
-    return _env_to_user(_late_system_to_user(messages)), tools, kwargs
+# The gate inserted into both request dialects of frontend.py. 4 spaces: the body of the
+# two to_messages functions. `os` is already imported by frontend.py.
+$gate = @"
+    if not os.environ.get("STRATA_ALLOW_THINKING"):
+        kwargs["enable_thinking"] = False       # no-reasoning patch: this request renders without <think> unless STRATA_ALLOW_THINKING=1
+    kwargs["strata_allow_thinking"] = bool(os.environ.get("STRATA_ALLOW_THINKING"))
 "@
-$openaiNew = @"
+$gate = LF $gate
+
+$oldOpenai = @"
             kwargs.update(effort_kwargs(v))
     kwargs["enable_thinking"] = False        # no-reasoning patch: every OpenAI request renders without <think>
-    return _env_to_user(_late_system_to_user(messages)), tools, kwargs
+$return
 "@
-$anthropicAnchor = @"
-        kwargs["enable_thinking"] = False
-    return _env_to_user(_late_system_to_user(messages)), tools, kwargs
+$oldOpenai = LF $oldOpenai
+$newOpenai = @"
+            kwargs.update(effort_kwargs(v))
+$gate
+$return
 "@
-$anthropicNew = @"
+$newOpenai = LF $newOpenai
+$cleanOpenai = @"
+            kwargs.update(effort_kwargs(v))
+$return
+"@
+$cleanOpenai = LF $cleanOpenai
+
+$oldAnthropic = @"
         kwargs["enable_thinking"] = False
     kwargs["enable_thinking"] = False        # no-reasoning patch: every Anthropic request renders without <think>
-    return _env_to_user(_late_system_to_user(messages)), tools, kwargs
+$return
 "@
-if ($frontText -notmatch 'no-reasoning patch') {
-    if (-not (Test-Path "$front.pre-no-reasoning")) { Copy-Item $front "$front.pre-no-reasoning" -Force }
-    if (-not $frontText.Contains($openaiAnchor)) { throw 'frontend.py: OpenAI anchor not found (a different Strata build?)' }
-    if (-not $frontText.Contains($anthropicAnchor)) { throw 'frontend.py: Anthropic anchor not found (a different Strata build?)' }
-    $frontText = $frontText.Replace($openaiAnchor, $openaiNew).Replace($anthropicAnchor, $anthropicNew)
-    Write-Text $front $frontText
-    $changed += 'frontend.py'
-}
+$oldAnthropic = LF $oldAnthropic
+$newAnthropic = @"
+        kwargs["enable_thinking"] = False
+$gate
+$return
+"@
+$newAnthropic = LF $newAnthropic
+$cleanAnthropic = @"
+        kwargs["enable_thinking"] = False
+$return
+"@
+$cleanAnthropic = LF $cleanAnthropic
 
-# 2) chat_template.jinja: the template can no longer think even if a caller forgets to pass the flag.
-if ($tplText -notmatch 'set enable_thinking = false') {
-    if (-not (Test-Path "$tpl.pre-no-reasoning")) { Copy-Item $tpl "$tpl.pre-no-reasoning" -Force }
-    $tplAnchor = @"
-{%- endif %}
-{%- set sysns = namespace(count=0, text='') %}
-"@
-    $tplNew = @"
+$oldTpl = @"
 {%- endif %}
 {%- set enable_thinking = false %}
 {%- set sysns = namespace(count=0, text='') %}
 "@
-    if (-not $tplText.Contains($tplAnchor)) { throw 'chat_template.jinja: anchor not found (a different Strata build?)' }
-    $tplText = $tplText.Replace($tplAnchor, $tplNew)
+$oldTpl = LF $oldTpl
+$cleanTpl = @"
+{%- endif %}
+{%- set sysns = namespace(count=0, text='') %}
+"@
+$cleanTpl = LF $cleanTpl
+$newTpl = @"
+{%- endif %}
+{%- set enable_thinking = (enable_thinking | default(true)) and (strata_allow_thinking | default(false)) %}
+{%- set sysns = namespace(count=0, text='') %}
+"@
+$newTpl = LF $newTpl
+
+# --- frontend.py ---------------------------------------------------------------------------
+if (-not $frontText.Contains('strata_allow_thinking')) {
+    if (-not (Test-Path "$front.pre-no-reasoning")) { Copy-Item $front "$front.pre-no-reasoning" -Force }
+
+    $upgrading = $frontText -match 'no-reasoning patch'
+    if ($upgrading) {
+        $pairs = @(@($oldOpenai, $newOpenai, 'OpenAI'), @($oldAnthropic, $newAnthropic, 'Anthropic'))
+    } else {
+        $pairs = @(@($cleanOpenai, $newOpenai, 'OpenAI'), @($cleanAnthropic, $newAnthropic, 'Anthropic'))
+    }
+    $out = $frontText
+    foreach ($pair in $pairs) {
+        if (-not $out.Contains($pair[0])) { throw "frontend.py: $($pair[2]) anchor not found (a different Strata build?)" }
+        $out = $out.Replace($pair[0], $pair[1])
+    }
+    if ($out -eq $frontText) { throw 'frontend.py: nothing changed (anchors matched empty text?)' }
+    $frontText = $out
+    Write-Text $front $frontText
+    $changed += $(if ($upgrading) { 'frontend.py (upgraded)' } else { 'frontend.py' })
+}
+
+# --- chat_template.jinja -------------------------------------------------------------------
+if (-not $tplText.Contains('strata_allow_thinking')) {
+    if (-not (Test-Path "$tpl.pre-no-reasoning")) { Copy-Item $tpl "$tpl.pre-no-reasoning" -Force }
+    $upgrading = $tplText.Contains('{%- set enable_thinking = false %}')
+    $anchor = $(if ($upgrading) { $oldTpl } else { $cleanTpl })
+    if (-not $tplText.Contains($anchor)) { throw 'chat_template.jinja: anchor not found (a different Strata build?)' }
+    $tplText = $tplText.Replace($anchor, $newTpl)
     Write-Text $tpl $tplText
-    $changed += 'chat_template.jinja'
+    $changed += $(if ($upgrading) { 'chat_template.jinja (upgraded)' } else { 'chat_template.jinja' })
 }
 
 if ($changed.Count -eq 0) { Write-Output 'already patched; nothing to do' }

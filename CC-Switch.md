@@ -6,6 +6,72 @@
 Общее для всех: сервер на `http://127.0.0.1:1234/v1`, ID модели `Qwen3.8-27B-NVFP4` (первое имя в
 `--served-model-name`), `contextWindow 229376` + `maxTokens 32768` = 262144 = `--max-model-len`.
 Почему сумма не должна превышать окно, см. раздел «Claude Code как клиент этих серверов» в `CLAUDE.md`.
+Исключение — раздел `strata/run-iq3_s-coding-reason.bat`: там Strata на порту 8080 и другое окно.
+
+## strata/run-iq3_s-coding-reason.bat
+
+Strata Terminal, не vLLM: `http://127.0.0.1:8080/v1`, ID модели `qwen3.8-flash-next-iq3_s`,
+окно 204800. Сумма `contextWindow 172032` + `maxTokens 32768` = 204800 — то же правило, что и выше.
+Локальный доступ ключ не требует, в `apiKey` можно положить любую строку.
+
+Рассуждения включены: конфиг задаёт уровень по умолчанию `high` (= `xhigh` шаблона) для запросов,
+где harness уровень не прислал; запрос всегда побеждает. Уровни Strata:
+`off`/`none`/`minimal` → размышления выключены, `low` → краткое, `medium` → без преамбулы,
+`high`/`xhigh`/`max` → xhigh. Поэтому в `reasoningEfforts` у `off` стоит строка `"off"`, а **не**
+`null`: `null` означает «поле не отправлено», и тогда сработает конфиг-уровень `high`, то есть
+размышления останутся включёнными. Набор `off/low/medium/high` покрывает всё; `xhigh` можно
+добавить отдельным пунктом — он маппится в тот же `xhigh`, что и `high`.
+
+```json
+{
+  "api": "openai-completions",
+  "baseURL": "http://127.0.0.1:8080/v1",
+  "models": {
+    "qwen3.8-flash-next-iq3_s": {
+      "name": "Qwen3.8-Flash-Next IQ3_S (thinking)",
+      "input": [
+        "text"
+      ],
+      "contextWindow": 172032,
+      "id": "qwen3.8-flash-next-iq3_s",
+      "maxTokens": 32768,
+      "reasoningEfforts": {
+        "off": "off",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "limit": {
+        "context": 172032,
+        "output": 32768
+      },
+      "reasoning": true,
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      }
+    }
+  },
+  "apiKeyEnv": "CC_SWITCH_DSH_CC_SWITCH_VLLM",
+  "displayName": "Qwen3.8-Flash-Next IQ3_S Strata (thinking)",
+  "name": "Qwen3.8-Flash-Next IQ3_S Strata (thinking)",
+  "options": {
+    "baseURL": "http://127.0.0.1:8080/v1",
+    "apiKey": "strata",
+    "headers": {}
+  }
+}
+```
+
+Если harness говорит по Anthropic (`/v1/messages`), уровень приходит как `output_config.effort`,
+а `thinking: {"type": "disabled"}` выключает размышления. Родной путь Strata для Claude Code —
+`strata connect claude`, он пишет те же адрес/модель и `CLAUDE_CODE_MAX_CONTEXT_TOKENS` /
+`CLAUDE_CODE_MAX_OUTPUT_TOKENS`; провайдер выше нужен, если хочется вести всё через CC Switch.
+Подробности и замеры — `strata/README.md` §9.
 
 ## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning.bat
 

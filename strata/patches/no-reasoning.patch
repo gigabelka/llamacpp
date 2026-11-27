@@ -1,22 +1,26 @@
 diff --git a/serve/frontend.py b/serve/frontend.py
 --- a/serve/frontend.py
 +++ b/serve/frontend.py
-@@ -742,6 +742,7 @@ def openai_to_messages(req: dict) -> tuple[list[dict], list[dict] | None, dict]:
+@@ -742,6 +742,9 @@
              kwargs = {"enable_thinking": False}
          elif k in ("reasoning_effort", "thinking_mode") and "enable_thinking" not in kwargs:
              kwargs.update(effort_kwargs(v))
-+    kwargs["enable_thinking"] = False        # no-reasoning patch: every OpenAI request renders without <think>
++    if not os.environ.get("STRATA_ALLOW_THINKING"):
++        kwargs["enable_thinking"] = False       # no-reasoning patch: this request renders without <think> unless STRATA_ALLOW_THINKING=1
++    kwargs["strata_allow_thinking"] = bool(os.environ.get("STRATA_ALLOW_THINKING"))
      return _env_to_user(_late_system_to_user(messages)), tools, kwargs
- 
- 
-@@ -955,6 +956,7 @@ def anthropic_to_messages(req: dict, think_unasked: bool = True) -> tuple[list[d
+
+
+@@ -955,6 +958,9 @@
          # A config's reasoning_effort still applies: Service.with_shared sets output_config before this runs.  A
          # request that gives its own reasoning_budget_tokens (#123) asks for thinking, so it thinks as before.
          kwargs["enable_thinking"] = False
-+    kwargs["enable_thinking"] = False        # no-reasoning patch: every Anthropic request renders without <think>
++    if not os.environ.get("STRATA_ALLOW_THINKING"):
++        kwargs["enable_thinking"] = False       # no-reasoning patch: this request renders without <think> unless STRATA_ALLOW_THINKING=1
++    kwargs["strata_allow_thinking"] = bool(os.environ.get("STRATA_ALLOW_THINKING"))
      return _env_to_user(_late_system_to_user(messages)), tools, kwargs
- 
- 
+
+
 diff --git a/serve/chat_template.jinja b/serve/chat_template.jinja
 --- a/serve/chat_template.jinja
 +++ b/serve/chat_template.jinja
@@ -24,7 +28,13 @@ diff --git a/serve/chat_template.jinja b/serve/chat_template.jinja
  {%- if not messages %}
      {{- raise_exception('No messages provided.') }}
  {%- endif %}
-+{%- set enable_thinking = false %}
++{%- set enable_thinking = (enable_thinking | default(true)) and (strata_allow_thinking | default(false)) %}
  {%- set sysns = namespace(count=0, text='') %}
  {%- for message in messages %}
      {%- if sysns.count == loop.index0 and (message.role == 'system' or message.role == 'developer') %}
+# The gate: the environment variable is read by the server process, so it must be set in the
+# shell that starts Strata (strata\run-iq3_s-coding-reason.bat sets it). Unset = today's
+# hard no-reasoning for both dialects; the template stays a second layer: without
+# strata_allow_thinking it renders the closed empty <think></think> even if a caller passes
+# enable_thinking=True. Apply with strata\patches\apply-no-reasoning.ps1 (idempotent, upgrades
+# the older unconditional patch); revert with -Revert.

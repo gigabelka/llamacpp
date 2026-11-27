@@ -393,7 +393,9 @@ screen (a piped launcher) that start refuses, and `--restart` stops the running 
 
 No-reasoning needs `strata/patches/apply-no-reasoning.ps1` applied to the installed serve\ files
 (strata/README.md section 4). Without the patch, `reasoning_effort: none` only covers requests that
-do not ask for thinking; a client that sends `thinking` gets its own level back. `strata update` does
+do not ask for thinking; a client that sends `thinking` gets its own level back. Since the patch
+became a gate on `STRATA_ALLOW_THINKING` (the reasoning .bat is the only thing that sets it), this
+launch keeps the hard off: the variable is unset here. `strata update` does
 not touch this .bat, the preset or the installed config, but it does replace serve\: re-run the patch
 after an update.
 
@@ -417,3 +419,56 @@ If the execution policy blocks local scripts, run it as
 `powershell -NoProfile -ExecutionPolicy Bypass -File strata\run-iq3_s-coding-noreason.ps1`.
 The no-reasoning patch (`strata/patches/apply-no-reasoning.ps1`) is required in the same way as for
 the .bat; `strata update` replaces serve\ and the patch must be applied again.
+
+## strata/run-iq3_s-coding-reason.bat
+
+The reasoning twin of the noreason .bat: the same model, engine, context (204800), `kv int8`,
+DFlash2 alone (`--draft-conf 0.35`, `draft_vocab_en.bin`), both cards, sampling defaults, but
+thinking ON at the template's `xhigh` level and the model-card sampler set
+`temperature 1.0 / top_p 0.95 / top_k 20 / min_p 0 / penalties 0 / repetition 1.0 / seed 1`
+(strata/README.md section 9).
+
+It does **not** use `strata launch --preset`. The preset (and `strata launch` itself) rebuilds the
+engine config from the single installed model config `%LOCALAPPDATA%\Strata\install\strata-iq3_s.json`,
+which holds `reasoning_effort: none`, so two presets on one model cannot differ in thinking. Instead
+the script starts the server in the foreground from its own run config with
+`strata serve --profile strata\qwen3.8-flash-next-iq3_s.coding-reason.json`: web UI and the
+OpenAI/Anthropic APIs on http://127.0.0.1:8080, no TUI monitor. Stop it with Ctrl+C in its console
+(or close the window); `strata monitor --url http://127.0.0.1:8080` attaches the dashboard of
+`strata launch` if wanted. Engine log: `strata\iq3_s-coding-reason.engine.log`; the server's own
+output stays in the console.
+
+The `set` line sets `STRATA_ALLOW_THINKING=1`. The reworked no-reasoning patch
+(`strata/patches/apply-no-reasoning.ps1`) reads that variable in both request dialects and passes it
+to the template as `strata_allow_thinking`; without it every request renders the closed empty
+`<think></think>`, exactly as before this configuration existed. Nothing else sets the variable, so
+`strata launch --preset "IQ3_S 200K"`, `install\run-iq3_s.bat` and the noreason .bat keep the hard
+no-reasoning behaviour, and the two configurations can be switched by starting one or the other
+(they still share port 8080 and both cards, so only one runs at a time).
+
+Run-config keys that matter, on top of the noreason config:
+- `reasoning_effort: "high"` - the default level for requests that name none. The config key takes
+  `none|low|medium|high` only (`xhigh` is refused at startup by `clean_shared_defaults`); `high`
+  maps to the template's `xhigh`, and a request's own `reasoning_effort` / `output_config.effort`
+  wins over it.
+- `effort_position: "end"` - a request's non-default level is rendered as a short system turn right
+  before the answer (`--tail-role-token`), so switching level in a harness does not invalidate the
+  cached conversation prefix. The startup log says `effort_position end: ...`.
+- `anthropic_thinking` is left at its default. `"on_request"` was tried and removed: with a config
+  `reasoning_effort` set, `Service.with_shared` fills `output_config` for every Anthropic request
+  that names no thinking, so an unasked request thinks at the config level whatever the key says.
+  A client disables thinking per request with `thinking: {"type": "disabled"}` (Anthropic) or
+  `reasoning_effort: "off"` (OpenAI).
+- The same `args`/`user_args` as the noreason config, so the engine command line is the noreason
+  one plus `--tail-role-token`: DFlash2 normalizes `--spec 4 --spec-min-p 0.5` to `--spec 6`, drops
+  the MTP layer and the min-p flag, and picks the converted `-selq4` drafter pack when the installed
+  engine reads it.
+
+Verified live: `strata serve --plan` reports the same engine argv as the noreason baseline; the
+startup log prints `sampling defaults from the config: temperature=1.0, top_p=0.95, ..., seed=1`,
+`effort_position end`, `drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)` and
+`drafting: draft vocabulary: draft_vocab_en.bin`. Run without `STRATA_ALLOW_THINKING` (the same
+config, requests asking `reasoning_effort: low` and `xhigh`) it returned `reasoning_tokens: 0`, so
+the gate overrides the config level and the request alike. Measurements and the harness provider:
+strata/README.md section 9 and CC-Switch.md.
+

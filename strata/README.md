@@ -16,6 +16,9 @@
 | --- | --- |
 | **Итоговый конфиг модели (source of truth)** | `C:\Users\viktor\AppData\Local\Strata\install\strata-iq3_s.json` |
 | Копия конфига для запуска и документации | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json` |
+| Конфиг режима с размышлениями | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json` |
+| **Запуск режима с размышлениями** (foreground, веб-UI) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-reason.bat` |
+| Лог движка режима с размышлениями | `c:\MyProjecs\llamacpp\strata\iq3_s-coding-reason.engine.log` |
 | **Файл запуска (с дашбордом `strata launch`)** | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.bat` |
 | Файл запуска PowerShell (то же самое) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.ps1` |
 | Бэкап конфига до правки | `c:\MyProjecs\llamacpp\strata\backup\strata-iq3_s.json.before-final` |
@@ -110,6 +113,12 @@
 Ограничения:
 
 - Патч действует на **все Qwen-модели** этого инстанса Strata (шаблон общий).
+- С 2026-11-27 патч — **гейт по переменной `STRATA_ALLOW_THINKING`**: без неё оба слоя работают
+  ровно как раньше (жёсткое «без размышлений»), с ней шаблон может думать. Переменную выставляет
+  только `run-iq3_s-coding-reason.bat`, так что noreason-пресет, `install\run-iq3_s.bat` и
+  обычный `strata launch` не изменились. Скрипт патча идемпотентен и сам обновляет старую
+  безусловную форму (`patched: … (upgraded)`), а `-Revert` по-прежнему восстанавливает
+  `.pre-no-reasoning`-копии. Подробности — §9.
 - `strata update` перезаписывает `serve\` — после обновления запустить
   `patches\apply-no-reasoning.ps1` заново (скрипт идемпотентен) и перезапустить сервер.
 - Откат: `patches\apply-no-reasoning.ps1 -Revert` (восстанавливает `.pre-no-reasoning`
@@ -180,6 +189,12 @@ no-reasoning, DFlash2 (кроме b7/b8/b11). 3 coding-промпта × 2 по�
 strata\run-iq3_s-coding-noreason.bat
 powershell -NoProfile -ExecutionPolicy Bypass -File strata\run-iq3_s-coding-noreason.ps1
 
+# режим с размышлениями: сервер в foreground, веб-UI на http://127.0.0.1:8080
+strata\run-iq3_s-coding-reason.bat
+# то же вручную (переменная обязательна, иначе патч выключит мышление)
+set STRATA_ALLOW_THINKING=1
+strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json
+
 # headless-вариант (без монитора), если нужен только сервер
 strata serve --profile c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json
 
@@ -196,10 +211,23 @@ python -I c:\MyProjecs\llamacpp\strata\bench\bench.py `
   --config c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-noreason.json `
   --out-dir c:\MyProjecs\llamacpp\strata\bench\results
 
+# замер режима с размышлениями: уровень — на запрос (off/low/medium/xhigh),
+# лимиты вывода подняты, потому что thinking тратит max_tokens
+python -I c:\MyProjecs\llamacpp\strata\bench\bench.py `
+  --variant r0-xhigh `
+  --config c:\MyProjecs\llamacpp\strata\bench\configs\r0.json `
+  --effort xhigh --max-tokens-short 2048 --max-tokens-depth 512 --max-tokens-prefill 256
+
+# проверка API-контрактов на запущенном сервере (уровни, thinking-блоки, разбор)
+python -I c:\MyProjecs\llamacpp\strata\bench\verify_reasoning_api.py
+
 # пересобрать варианты A/B
 python -I c:\MyProjecs\llamacpp\strata\bench\make_configs.py `
   C:\Users\viktor\AppData\Local\Strata\install\strata-iq3_s.json `
   c:\MyProjecs\llamacpp\strata\bench\configs
+python -I c:\MyProjecs\llamacpp\strata\bench\make_configs.py `
+  c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json `
+  c:\MyProjecs\llamacpp\strata\bench\configs --family reason
 ```
 
 `run-iq3_s-coding-noreason.bat` вызывает `strata launch --preset "IQ3_S 200K"`: сервер запускается
@@ -249,3 +277,148 @@ headless-запуска `strata serve --profile`, сам `.bat` её больш�
   0.06 с), поэтому считать эти варианты «без кэша» нельзя.
 - Замеры — по одному прогону на вариант (кроме 3 промптов × 2 повторов внутри), шум ±5–8 %.
   Числа 90.6/1210 из тюнера и 120–158 t/s из логов движка относятся к другим промптам.
+
+## 9. Режим с размышлениями
+
+Отчёт от 2026-11-27. Вторая конфигурация того же стенда: та же модель, движок, контекст 204800,
+`kv int8`, DFlash2 (`--draft-conf 0.35`, `draft_vocab_en.bin`), обе карты — но мышление включено,
+а уровень выбирает harness по запросу. Noreason-конфиг §3–§8 не меняется.
+
+### 9.1 Состав
+
+| что | путь |
+| --- | --- |
+| Конфиг (источник правды для `strata serve`) | `strata\qwen3.8-flash-next-iq3_s.coding-reason.json` |
+| Запуск | `strata\run-iq3_s-coding-reason.bat` |
+| Лог движка | `strata\iq3_s-coding-reason.engine.log` |
+| A/B-конфиги | `strata\bench\configs\r0..r2.json` |
+| Результаты | `strata\bench\results\r*-*.json` |
+| Проверка API | `strata\bench\verify_reasoning_api.py` |
+| Проверка кэша при смене уровня | `strata\bench\check_effort_cache.py` |
+
+`.bat` делает `set STRATA_ALLOW_THINKING=1` и `strata serve --profile` — сервер в foreground,
+веб-UI `http://127.0.0.1:8080`, остановка Ctrl+C. Через `strata launch --preset` этот режим не
+запустить: пресет один на модель и каждый запуск пересобирает конфиг из
+`install\strata-iq3_s.json`, где `reasoning_effort: none`; два пресета с разным мышлением на одну
+модель не сосуществуют. Одновременно живёт только один режим (порт 8080 и обе карты).
+
+Патч `serve\` (§4) стал гейтом: без `STRATA_ALLOW_THINKING` оба слоя жёстко выключают `<think>` —
+noreason-пресет, `install\run-iq3_s.bat` и обычный `strata launch` ведут себя как раньше.
+
+### 9.2 Что в конфиге
+
+| ключ | значение | зачем |
+| --- | --- | --- |
+| `reasoning_effort` | `"high"` | уровень по умолчанию для запросов без своего. Ключ конфига принимает только `none/low/medium/high`; `xhigh` отвергается при старте, а `high` — это `xhigh` шаблона |
+| `sampling` | 1.0 / 0.95 / 20 / min_p 0 / penalties 0 / rep 1.0 / seed 1 | thinking-набор карточки модели; совпадает с thinking-протоколом самой Strata (`strata-qwen38-thinking-v1-draft.1`). Карточка предупреждает о циклах в `<think>` при низкой температуре; в прогоне r1 (0.6) их не было, но дефолт оставлен 1.0 |
+| `effort_position` | `"end"` | не-дефолтный уровень едет коротким system-ходом прямо перед ответом (`--tail-role-token`), префикс промпта не меняется — смена уровня в harness не сбрасывает кэш |
+| `anthropic_thinking` | не задан | `"on_request"` **не помогает**: при заданном `reasoning_effort` `Service.with_shared` подставляет `output_config` раньше конвертера, и запрос без `thinking` всё равно думает на конфиг-уровне |
+
+Проверено в логе старта: `thinking level: high`, `sampling defaults from the config: temperature=1.0,
+top_p=0.95, top_k=20, min_p=0.0, presence_penalty=0.0, frequency_penalty=0.0, repetition_penalty=1.0,
+seed=1`, `effort_position end: ...`, `drafting: DFlash2 alone (--draft dflash2, --draft-conf 0.35)`,
+`drafting: draft vocabulary: draft_vocab_en.bin`. Аргументы движка совпадают с noreason-линией
+(DFlash2 нормализует `--spec 4 --spec-min-p 0.5` в `--spec 6`, MTP вырезан, драфтер —
+конвертированный `-selq4`-пак), плюс `--tail-role-token`.
+
+Ещё одна механика, которую стоит знать: при `max_tokens ≥ 1024` Strata без бюджета закрывает
+thinking заранее, чтобы ответу осталось место: `budget = max_tokens − clamp(max_tokens/4, 512,
+max_tokens/2)`; при 2048 это 1536. Отключается `"answer_room": false` в конфиге — не отключаем,
+иначе harness с малым `max_tokens` получит пустой ответ.
+
+### 9.3 Как выбрать уровень
+
+Запрос всегда побеждает конфиг:
+
+| клиент | поле | маппинг |
+| --- | --- | --- |
+| OpenAI | `reasoning_effort` | `off`/`none`/`minimal`/`disabled` → выключено; `low`; `medium`; `high`/`xhigh`/`max` → xhigh |
+| OpenAI | `chat_template_kwargs {"enable_thinking": false}` | выключено |
+| Anthropic | `thinking: {"type": "disabled"}` | выключено |
+| Anthropic | `thinking.budget_tokens` | <2048 → low, <8192 → medium, иначе high (и сам бюджет) |
+| Anthropic | `output_config.effort` | как `reasoning_effort` |
+
+Шаблон различает три уровня: `low` (кратко), `medium` (без преамбулы), `xhigh` (полная
+инструкция). Ответы приходят с `reasoning_content` (OpenAI) и `thinking`-блоками (Anthropic).
+Провайдер CC Switch для harness — в `CC-Switch.md`; родной путь Strata — `strata connect claude`.
+
+### 9.4 Замеры
+
+Методика та же, что в §5: те же промпты и кейсы, один сервер, карты свободны. Отличия: лимиты
+вывода подняты, потому что thinking тратит `max_tokens` (short 2048, depth 512, prefill 256), а
+`decode_all` считается по всем completion-токенам (reasoning + ответ) от первого до последнего
+дельты — старый `decode` в thinking-прогонах измеряет только видимый ответ и врёт. Уровень —
+per-request на одном старте (r0, 1.0/0.95, `effort_position end`).
+
+| прогон | short decode_all, med | depth16k decode_all | prefill 191k, t/s | reasoning, символов | пустых ответов |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| r0, effort xhigh | 88.7 | 75.8 | 2708.8 | 35 085 | 1 (warmup) |
+| r0, effort medium | 89.5 | 62.0 | 2687.8 | 29 672 | 1 (warmup) |
+| r0, effort low | 90.9 | 84.3 | 2709.0 | 25 330 | 1 (warmup) |
+| r0, effort off | 118.2 | 68.1 | 2704.8 | 0 | 0 |
+| r1 (0.6/0.8), effort xhigh | 96.3 | 78.0 | 2706.9 | 31 974 | 1 (warmup) |
+| r2 (`effort_position start`), effort xhigh | 86.5 | 88.1 | 2712.1 | 30 942 | 1 (warmup) |
+
+Для сравнения, noreason-линия §5 (512 `max_tokens`, temp 0.6/0.8, ответы без reasoning) — 114.7 t/s
+по видимому ответу; наш `off` на сэмплерах 1.0/0.95 дал 118.2 t/s, то есть то же в пределах шума.
+Выводы:
+
+- мышление стоит ~25 % скорости ответа (88.7 против 118.2 на одинаковых сэмплерах); prefill не
+  меняется (~2700 t/s на 191k, как в §5);
+- уровень меняет длину рассуждения (35k / 30k / 25k символов на xhigh/medium/low при 2048
+  max_tokens), но не скорость декода в пределах шума; выбор уровня — это про качество и длину
+  thinking, а не про t/s;
+- `temperature 0.6` (r1) дал 96.3 t/s против 88.7 у 1.0 — на ~8 % быстрее при той же длине
+  рассуждений; зацикливания в шести коротких ответах не было. Это один прогон, а карточка модели
+  прямо предупреждает о циклах в `<think>` при низкой температуре, поэтому 1.0 оставлено
+  дефолтом; 0.6 — рычаг, если скорость важнее;
+- `decode` (только видимый ответ) в thinking-прогонах не имеет смысла (сотни и тысячи t/s): ответ
+  короткий, а токены считаются все; ориентироваться только на `decode_all`;
+- depth16k-числа шумные: ответ там 3–35 символов, `decode_all` считается по 12–131 токену;
+- разброс между повторами одного промпта большой (reasoning 2.6k против 6.0k символов на
+  `medium`), это стохастика temp 1.0, а не конфиг; одиночный прогон — не A/B.
+
+Точность на двух синтетических задачах (по одному прогону, не статистика): `util_137(2)=686`
+верно у medium/xhigh (у low и off — выражение `137*2+412`, тоже верное), а `k2711=8134` на
+глубине 191k верно у xhigh на r0 и на r2; low/medium/off и r1 (0.6) ответили 8734/9085. Это
+аргумент держать xhigh дефолтом для длинного контекста, но выборка слишком мала — проверять на
+своих задачах.
+
+### 9.4.1 Смена уровня и кэш
+
+`check_effort_cache.py` шлёт один и тот же промпт (11.1k токенов) три раза: xhigh → low → xhigh.
+
+| сервер | запрос | prompt_tokens | cached_tokens | время |
+| --- | --- | ---: | ---: | ---: |
+| r1, `effort_position: end` | xhigh | 11 105 | 0 | 7.7 с |
+| r1, `effort_position: end` | low | 11 135 (+30 хвост) | **11 100** | 0.9 с |
+| r1, `effort_position: end` | xhigh | 11 105 | **11 100** | 0.6 с |
+| r2, `effort_position: start` | xhigh | 11 105 | 0 | 7.6 с |
+| r2, `effort_position: start` | low | 11 093 | 0 | 7.1 с |
+| r2, `effort_position: start` | xhigh | 11 105 | 0 | 7.1 с |
+
+На `end` смена уровня переиспользует весь префикс: новый только 30-токенный хвост с уровнем
+(0.9 с против 7.7 с холодного префилла). На `start` каждый запрос с другим уровнем префиллит
+заново: `cached_tokens` 0 и ~7 с на всех трёх запросах, включая возврат к xhigh — преамбула
+уровня стоит в system-блоке в начале и меняет префикс. Скорость декода при этом одинаковая
+(r0 88.7 против r2 86.5 — шум), так что `end` не стоит ничего и экономит префилл в harness,
+где уровень меняют на ходу.
+
+Оговорка об артефактах: r0.json пересобран после этих прогонов — в нём исправлен только путь к
+`log` (был относительный, из-за чего сервер не стартовал из r1/r2). Поэтому `config_sha256` в
+`r0-*.json` относится к предыдущей версии файла; настройки, по которым шли замеры, те же.
+
+### 9.5 Ограничения
+
+- `strata update` заменяет `serve\`: после обновления повторить
+  `patches\apply-no-reasoning.ps1` (скрипт идемпотентен) и перезапустить сервер. Конфиг, батник
+  и бенч апдейт не трогает.
+- Без `STRATA_ALLOW_THINKING=1` reasoning-конфиг ведёт себя как noreason — переменную выставляет
+  только `run-iq3_s-coding-reason.bat`. Проверено живьём: при незаданной переменной запросы с
+  `reasoning_effort: "low"` и `"xhigh"` вернули `reasoning_content` 0 символов и
+  `reasoning_tokens: 0`, хотя в конфиге стоит `high`, а лог печатает `thinking level: high` —
+  гейт патча стоит ниже конфига и перебивает и его, и запрос.
+- `strata serve` пишет свой вывод в консоль, а не в лог-файл; лог движка — по полю `log` конфига.
+- Файл `<config>.shared-settings.json` рядом с конфигом (настройки Chat из веб-UI) перекрывает
+  `reasoning_effort`; при замерах его быть не должно.
+- Никакой побитовой повторяемости по-прежнему нет (§6): с thinking это тем более так.
