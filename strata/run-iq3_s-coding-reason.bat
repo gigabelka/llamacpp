@@ -2,6 +2,7 @@
 title Strata Qwen3.8-Flash-Next IQ3_S coding reason
 set STRATA_ALLOW_THINKING=1
 cd /d "C:\MyProjecs\llamacpp\strata"
+if not exist "C:\MyProjecs\llamacpp\logs" mkdir "C:\MyProjecs\llamacpp\logs"
 if not exist "%APPDATA%\Strata\profiles\iq3_s-coding-reason.json" call "C:\Users\viktor\AppData\Local\Strata\terminal\current\bin\strata.cmd" profile create iq3_s-coding-reason --from-config "C:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-iq3_s.coding-reason.json" --quiet
 call "C:\Users\viktor\AppData\Local\Strata\terminal\current\bin\strata.cmd" runtime status --profile iq3_s-coding-reason | findstr /b /c:"iq3_s-coding-reason: ready" /c:"iq3_s-coding-reason: starting" >nul
 if not errorlevel 1 goto dashboard

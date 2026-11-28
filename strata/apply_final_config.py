@@ -12,6 +12,7 @@ import shutil
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+LOGS = HERE.parent / "logs"
 DEFAULT = Path(r"C:\Users\viktor\AppData\Local\Strata\install\strata-iq3_s.json")
 VOCAB = Path(r"C:\Users\viktor\AppData\Local\Strata\terminal\0.1.69\data\draft_vocab_en.bin")
 COPY = HERE / "qwen3.8-flash-next-iq3_s.coding-noreason.json"
@@ -32,6 +33,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--config", default=str(DEFAULT))
 a = ap.parse_args()
 path = Path(a.config)
+LOGS.mkdir(parents=True, exist_ok=True)
 
 cfg = json.loads(path.read_text(encoding="utf-8-sig"))
 backup = HERE / "backup" / "strata-iq3_s.json.before-final"
@@ -62,10 +64,10 @@ if isinstance(cfg.get("args"), list):
     cfg["args_written"] = list(cfg["args"])
 path.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
 # The copy is the run config of run-iq3_s-coding-noreason.bat: it follows `terminal\current`
-# after an update and writes its own engine log next to the report.
+# after an update and writes its engine log into the repository-root logs/ folder (gitignored).
 copy_cfg = json.loads(json.dumps(cfg))
 copy_cfg["cwd"] = r"C:\Users\viktor\AppData\Local\Strata\terminal\current"
-copy_cfg["log"] = str(HERE / "iq3_s-coding-noreason.engine.log")
+copy_cfg["log"] = str(LOGS / "iq3_s-coding-noreason.engine.log")
 COPY.write_text(json.dumps(copy_cfg, indent=1), encoding="utf-8")
 print(f"applied to {path}")
 print(f"copy: {COPY}")

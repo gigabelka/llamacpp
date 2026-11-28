@@ -20,7 +20,8 @@
 | **Запуск режима с размышлениями** (сервер + TUI-дашборд) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-reason.bat` |
 | Профиль режима с размышлениями (runtime) | `C:\Users\viktor\AppData\Roaming\Strata\profiles\iq3_s-coding-reason.json` |
 | Лог сервера режима с размышлениями | `C:\Users\viktor\AppData\Local\Strata\runtime\iq3_s-coding-reason.server.log` |
-| Лог движка режима с размышлениями | `c:\MyProjecs\llamacpp\strata\iq3_s-coding-reason.engine.log` |
+| Лог движка режима с размышлениями | `c:\MyProjecs\llamacpp\logs\iq3_s-coding-reason.engine.log` |
+| Папка логов всех прогонов (в `.gitignore`) | `c:\MyProjecs\llamacpp\logs\` |
 | **Файл запуска (с дашбордом `strata launch`)** | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.bat` |
 | Файл запуска PowerShell (то же самое) | `c:\MyProjecs\llamacpp\strata\run-iq3_s-coding-noreason.ps1` |
 | Бэкап конфига до правки | `c:\MyProjecs\llamacpp\strata\backup\strata-iq3_s.json.before-final` |
@@ -238,6 +239,11 @@ python -I c:\MyProjecs\llamacpp\strata\bench\make_configs.py `
   c:\MyProjecs\llamacpp\strata\bench\configs --family reason
 ```
 
+Логи вариантов `make_configs.py` пишет не рядом с конфигами, а в `c:\MyProjecs\llamacpp\logs\`
+(`<id>.engine.log`, папка в `.gitignore`); конфиги остаются в `strata\bench\configs\`. Правка поля
+`log` меняет байты конфигов, поэтому `config_sha256`, записанный в старых
+`strata\bench\results\*.json`, с текущими файлами уже не совпадёт — настройки в них те же.
+
 `run-iq3_s-coding-noreason.bat` вызывает `strata launch --preset "IQ3_S 200K"`: сервер запускается
 как инстанс `strata runtime` и открывается тот же монитор, что и при обычном `strata launch`
 (Overview / Serving / Requests / Engine / Hardware / Logs / Connect). Остановка — `q` в мониторе
@@ -298,7 +304,7 @@ headless-запуска `strata serve --profile`, сам `.bat` её больш�
 | --- | --- |
 | Конфиг (источник правды для `strata serve`) | `strata\qwen3.8-flash-next-iq3_s.coding-reason.json` |
 | Запуск | `strata\run-iq3_s-coding-reason.bat` |
-| Лог движка | `strata\iq3_s-coding-reason.engine.log` |
+| Лог движка | `logs\iq3_s-coding-reason.engine.log` (папка `logs\` в корне — в `.gitignore`) |
 | A/B-конфиги | `strata\bench\configs\r0..r2.json` |
 | Результаты | `strata\bench\results\r*-*.json` |
 | Проверка API | `strata\bench\verify_reasoning_api.py` |
@@ -447,7 +453,7 @@ per-request на одном старте (r0, 1.0/0.95, `effort_position end`).
   гейт патча стоит ниже конфига и перебивает и его, и запрос.
 - `strata serve` пишет свой вывод в консоль; у reason-скрипта сервер фоновый (runtime), его вывод —
   в `%LOCALAPPDATA%\Strata\runtime\iq3_s-coding-reason.server.log`, лог движка — по полю `log`
-  конфига (`strata\iq3_s-coding-reason.engine.log`).
+  конфига (`logs\iq3_s-coding-reason.engine.log`; папка `logs\` в корне репозитория — в `.gitignore`).
 - Файл `<config>.shared-settings.json` рядом с конфигом (настройки Chat из веб-UI) перекрывает
   `reasoning_effort`; при замерах его быть не должно.
 - Никакой побитовой повторяемости по-прежнему нет (§6): с thinking это тем более так.

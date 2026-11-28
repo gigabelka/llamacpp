@@ -31,7 +31,7 @@
  "cwd": "C:\\Users\\viktor\\AppData\\Local\\Strata\\terminal\\current",
  "tokenizer": "C:\\Users\\viktor\\AppData\\Local\\Strata\\Strata-data\\packs\\iq3_s\\tokenizer",
  "model_name": "qwen3.8-flash-next-iq3_s",
- "log": "C:\\MyProjecs\\llamacpp\\strata\\bench\\configs\\r0.engine.log",
+ "log": "C:\\MyProjecs\\llamacpp\\logs\\r0.engine.log",
  "lib_dirs": [],
  "port": 8080,
  "gpu": [

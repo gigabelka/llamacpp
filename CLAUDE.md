@@ -914,6 +914,13 @@ Reference: <https://unsloth.ai/docs/models/qwen3.8> and the model card.
 uses `llama-server.exe`, vLLM, the `-c`/`-ts`/`-ctk` knobs or `CALCULATE.md`; `strata/README.md`
 (Russian) is the full report and `BAT_NOTES.md` has the per-script notes.
 
+Engine logs of every Strata run go to the repository-root `logs/`, which `.gitignore` excludes
+(`/logs/`, `*.log`) — do not commit them. The `log` field of the run configs, `bench/make_configs.py`
+and `apply_final_config.py` all point there; the generator scripts and
+`run-iq3_s-coding-reason.bat` create the folder, so a fresh clone needs no manual step. Bench
+*results* (`strata/bench/results/*.json`) are not logs and stay tracked; note that repointing a
+config's `log` changes its bytes and therefore the `config_sha256` recorded in old results.
+
 Two configurations of the same model (Qwen3.8-Flash-Next IQ3_S, context 204800, `kv int8`, DFlash2
 alone, both RTX 5060 Ti), chosen by which `.bat` is started — one server at a time, port 8080:
 

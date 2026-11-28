@@ -4,7 +4,8 @@ Usage: python make_configs.py <base-config.json> <out-dir> [--family noreason|re
 
 Each variant is a full copy of the base config with the top-level keys the
 Strata server reads (drafting, draft_vocab, reasoning_effort, effort_position,
-sampling), the person's engine options in user_args, and its own engine log.
+sampling), the person's engine options in user_args, and an engine log in the repository
+`logs/` directory (gitignored).
 
 --family noreason (the default) writes the b0..b12 table of the 2026-11-27 report.
 --family reason writes the r0..r2 table of the reasoning configuration: the same
@@ -25,6 +26,10 @@ BASE = Path(a.base)
 # layouts here pass the out-dir relatively (strata/README.md section 7).
 OUT = Path(a.out).resolve()
 OUT.mkdir(parents=True, exist_ok=True)
+# Engine logs of every variant land in the repository-root logs/ folder, which is gitignored.
+# The configs themselves stay in the out-dir.
+LOGS = Path(__file__).resolve().parents[2] / "logs"
+LOGS.mkdir(parents=True, exist_ok=True)
 
 VOCAB_DIR = Path(r"C:\Users\viktor\AppData\Local\Strata\terminal\0.1.69\data")
 VOCAB_FILES = {"cjk": "draft_vocab.bin", "en": "draft_vocab_en.bin", "cyrillic": "draft_vocab_cyrillic.bin",
@@ -77,7 +82,7 @@ if a.family == "reason":
         cfg["effort_position"] = position
         cfg["sampling"] = dict(REASON_SAMPLING, temperature=temperature, top_p=top_p)
         cfg.pop("draft_vocab", None)          # the file, not the name: --mtp-draft-vocab in user_args
-        cfg["log"] = str(OUT / f"{vid}.engine.log")
+        cfg["log"] = str(LOGS / f"{vid}.engine.log")
         cfg["port"] = 8080
         cfg["host"] = "127.0.0.1"
         path = OUT / f"{vid}.json"
@@ -97,7 +102,7 @@ else:
                 raise SystemExit(f"missing draft vocabulary: {vocab_file}")
             user = ["--draft-conf", conf, "--mtp-draft-vocab", str(vocab_file)] + list(extra)
         cfg["user_args"] = user
-        cfg["log"] = str(OUT / f"{vid}.engine.log")
+        cfg["log"] = str(LOGS / f"{vid}.engine.log")
         cfg["port"] = 8080
         cfg["host"] = "127.0.0.1"
         path = OUT / f"{vid}.json"

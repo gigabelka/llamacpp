@@ -484,9 +484,13 @@ http://127.0.0.1:8080; stop it to start the reason instance.` before the pause.
 A piped launcher (an IDE "run" button, no TTY) gets `interactive monitor needs a terminal` from the
 monitor (exit 2) and the script pauses on it; start the file from a normal console.
 
-Engine log: `strata\iq3_s-coding-reason.engine.log`. The server's own output (startup lines, request
-errors) goes to `%LOCALAPPDATA%\Strata\runtime\iq3_s-coding-reason.server.log`, because the instance
-is backgrounded. Only one configuration runs at a time, as before: the reason instance and the
+Engine log: `logs\iq3_s-coding-reason.engine.log` — the config's `log` field now points into the
+repository-root `logs\` folder, which `.gitignore` excludes (`/logs/`, `*.log`), so a run no longer
+drops a tracked log into the tree. The line after `cd /d`
+(`if not exist "C:\MyProjecs\llamacpp\logs" mkdir "C:\MyProjecs\llamacpp\logs"`) creates that folder
+first, because git cannot carry an empty ignored directory into a fresh clone. The server's own output
+(startup lines, request errors) goes to `%LOCALAPPDATA%\Strata\runtime\iq3_s-coding-reason.server.log`,
+because the instance is backgrounded. Only one configuration runs at a time, as before: the reason instance and the
 noreason launch share port 8080 and both cards, so they cannot be up together; a server started
 while 8080 is taken exits with `address already in use` in its server log, and the script fails at
 `runtime start` instead of opening the dashboard against the other server.
