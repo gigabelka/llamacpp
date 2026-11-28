@@ -73,6 +73,108 @@ Strata Terminal, не vLLM: `http://127.0.0.1:8080/v1`, ID модели `qwen3.8
 `CLAUDE_CODE_MAX_OUTPUT_TOKENS`; провайдер выше нужен, если хочется вести всё через CC Switch.
 Подробности и замеры — `strata/README.md` §9.
 
+## strata/run-nvfp4-coding-noreason.bat
+
+Strata Terminal, вторая модель: `http://127.0.0.1:8080/v1`, ID модели
+`qwen3.8-flash-next-nvfp4-nvfp4`, окно 262144. Сумма `contextWindow 229376` + `maxTokens 32768`
+= 262144 — то же правило, что и выше (запрос с `prompt + max_tokens` больше окна Strata
+отбивает). Рассуждения выключены патчем (`strata/patches/apply-no-reasoning.ps1`):
+`reasoning: false`, `reasoningEfforts: false`.
+
+Модель отвечает заметно медленнее IQ3_S (~20–26 t/s decode против ~114): эксперты не влезают в RAM
+целиком, часть читается с диска (§10 в `strata/README.md`).
+
+```json
+{
+  "api": "openai-completions",
+  "apiKeyEnv": "CC_SWITCH_DSH_CC_SWITCH_VLLM",
+  "models": {
+    "qwen3.8-flash-next-nvfp4-nvfp4": {
+      "name": "Qwen3.8-Flash-Next NVFP4 (no-thinking)",
+      "input": [
+        "text"
+      ],
+      "id": "qwen3.8-flash-next-nvfp4-nvfp4",
+      "maxTokens": 32768,
+      "reasoningEfforts": false,
+      "contextWindow": 229376,
+      "limit": {
+        "context": 229376,
+        "output": 32768
+      },
+      "reasoning": false,
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      }
+    }
+  },
+  "displayName": "Qwen3.8-Flash-Next NVFP4 Strata (no-thinking)",
+  "baseURL": "http://127.0.0.1:8080/v1",
+  "name": "Qwen3.8-Flash-Next NVFP4 Strata (no-thinking)",
+  "options": {
+    "baseURL": "http://127.0.0.1:8080/v1",
+    "apiKey": "strata",
+    "headers": {}
+  }
+}
+```
+
+## strata/run-nvfp4-coding-reason.bat
+
+Тот же сервер и модель, рассуждения включены: конфиг задаёт уровень по умолчанию `high`
+(= `xhigh` шаблона), запрос всегда побеждает; уровни и ловушка с `off`/`null` — как в разделе
+`strata/run-iq3_s-coding-reason.bat` выше. Окно 262144: `contextWindow 229376` + `maxTokens 32768`.
+
+```json
+{
+  "api": "openai-completions",
+  "baseURL": "http://127.0.0.1:8080/v1",
+  "models": {
+    "qwen3.8-flash-next-nvfp4-nvfp4": {
+      "name": "Qwen3.8-Flash-Next NVFP4 (thinking)",
+      "input": [
+        "text"
+      ],
+      "contextWindow": 229376,
+      "id": "qwen3.8-flash-next-nvfp4-nvfp4",
+      "maxTokens": 32768,
+      "reasoningEfforts": {
+        "off": "off",
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      },
+      "limit": {
+        "context": 229376,
+        "output": 32768
+      },
+      "reasoning": true,
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      }
+    }
+  },
+  "apiKeyEnv": "CC_SWITCH_DSH_CC_SWITCH_VLLM",
+  "displayName": "Qwen3.8-Flash-Next NVFP4 Strata (thinking)",
+  "name": "Qwen3.8-Flash-Next NVFP4 Strata (thinking)",
+  "options": {
+    "baseURL": "http://127.0.0.1:8080/v1",
+    "apiKey": "strata",
+    "headers": {}
+  }
+}
+```
+
 ## gittensor/gittensor-qwen38-27-nvfp4-vllm-rtx5060-mtp-no-reasoning.bat
 
 Рассуждения выключены (`--default-chat-template-kwargs {"enable_thinking":false}`):

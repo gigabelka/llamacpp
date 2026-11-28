@@ -8,6 +8,9 @@
 **без режима рассуждений**. Контекст **204800 (200k) не менялся** (родной контекст модели —
 262144, но по требованию оставлен 200k). Бенч: 2× RTX 5060 Ti 16 GB, Ryzen 9 9950X, 64 GB DDR5.
 
+Вторая модель — **Qwen3.8-Flash-Next NVFP4-GPTQ** (128 ГБ, эксперты NVFP4): свой подбор
+контекста, конфигурации и замеры — в §10.
+
 ## 1. Все пути
 
 Корень данных Strata (`settings.json`): `C:\Users\viktor\AppData\Local\Strata\Strata-data`.
@@ -457,3 +460,265 @@ per-request на одном старте (r0, 1.0/0.95, `effort_position end`).
 - Файл `<config>.shared-settings.json` рядом с конфигом (настройки Chat из веб-UI) перекрывает
   `reasoning_effort`; при замерах его быть не должно.
 - Никакой побитовой повторяемости по-прежнему нет (§6): с thinking это тем более так.
+
+## 10. Вторая модель: Qwen3.8-Flash-Next NVFP4-GPTQ
+
+Отчёт от 2026-11-28. Модель: **Maximilian228/Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata**
+(готовый Strata-пак, 127.96 ГБ на диске): маршрутизированные эксперты — NVFP4, переквантованные
+GPTQ (GGML type 40, 48 слоёв × 512 экспертов, 63.28 ГиБ в `pack\experts.bin`); плотная сторона
+(attention, GDN, shared experts, `output`) — Q8_0/BF16/F32 в `qwen-nvfp4-gptq-dense.gguf`;
+n-gram-таблица (PLE) — FP8, отдельный `ple-fp8.gguf` (47.68 ГиБ); токен-эмбеддинги — BF16;
+MTP-голова — Q2_0 в `Strata-data\mtp\rt`. Геометрия та же, что у IQ3_S: `qwen4exp`, 48 слоёв,
+12 full-attention из 48, `d = 2560`, `kv_heads 2`, обученный контекст 262144.
+
+Задача была обратной IQ3_S: не «оставить 200k», а **найти максимальный контекст, который
+реально стартует и работает** на этих двух картах и 61.7 ГиБ RAM. Лестница измерена целиком:
+**524288 при `kv int8`** (yarn 2) стартует и находит факт на промпте 501 456 токенов,
+**1048576 при `q4_0`** тоже стартует. Но выбрана (решение владельца) **262144 при `kv int8`** —
+обученный предел модели, без yarn, примерно на 30 % быстрее 512k и без риска для качества на
+длинных дистанциях. Лестница ниже оставлена как измеренная альтернатива: любой шаг включается
+`--max-context`/`--kv`/`--rope-*` и новым пресетом.
+
+### 10.1 Пути
+
+| что | путь |
+| --- | --- |
+| **Итоговый конфиг модели (source of truth)** | `C:\Users\viktor\AppData\Local\Strata\install\strata-nvfp4-nvfp4.json` |
+| Копия конфига без рассуждений | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-nvfp4.coding-noreason.json` |
+| Конфиг с рассуждениями | `c:\MyProjecs\llamacpp\strata\qwen3.8-flash-next-nvfp4.coding-reason.json` |
+| **Запуск без рассуждений** (сервер + дашборд) | `c:\MyProjecs\llamacpp\strata\run-nvfp4-coding-noreason.bat` |
+| **Запуск с рассуждениями** | `c:\MyProjecs\llamacpp\strata\run-nvfp4-coding-reason.bat` |
+| Пресет `strata launch` | `C:\Users\viktor\AppData\Roaming\Strata\launch-presets\nvfp4-256k.json` («NVFP4 256K») |
+| Профиль рассуждений | `C:\Users\viktor\AppData\Roaming\Strata\profiles\nvfp4-coding-reason.json` |
+| Профиль подбора контекста/бенчей | `...\profiles\nvfp4-ctx-probe.json` (указывает на probe-конфиг) |
+| Модель (пак) | `...\Strata-data\models\Maximilian228--Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata\` |
+| Pack + токенизатор | `...\Maximilian228--...\pack\` (`index.txt`, `experts.bin`, `dense.bin`, `tokenizer\`) |
+| Логи движка | `C:\MyProjecs\llamacpp\logs\{nvfp4-ctx-*,v0..v3,vfp4-coding-reason}.engine.log` |
+| Лог сервера (launch) | `%LOCALAPPDATA%\Strata\launch\nvfp4-256k.engine.log`, `...\runtime\launch-nvfp4-256k.server.log` |
+| Лог сервера (reason) | `%LOCALAPPDATA%\Strata\runtime\nvfp4-coding-reason.server.log` |
+| Бэкап конфига до правки | `c:\MyProjecs\llamacpp\strata\backup\strata-nvfp4-nvfp4.json.before-final` |
+| Инструмент лестницы | `c:\MyProjecs\llamacpp\strata\bench\ctxprobe\probe.py` |
+| Проверка длинного контекста | `c:\MyProjecs\llamacpp\strata\bench\ctxprobe\needle.py` |
+| Конфиги A/B | `c:\MyProjecs\llamacpp\strata\bench\configs-nvfp4\v0..v3.json` |
+| Результаты | `c:\MyProjecs\llamacpp\strata\bench\results\{v0..v3,r-*}-*.json` |
+
+### 10.2 Лестница контекста
+
+Как искали: один probe-конфиг (копия установленного), профиль `nvfp4-ctx-probe` указывает на
+файл, а не на его байты, поэтому каждая ступень — это `probe.py write --ctx N`, `runtime
+start --profile nvfp4-ctx-probe`, smoke/замер, `runtime stop`. `probe.py log` печатает строки,
+которые решают «поместилось ли»: слоты кэша экспертов на каждой карте, свободную VRAM после
+загрузки, сколько экспертов читается с диска. KV считается по 13 ячеек на токен: int8 —
+13 728 Б/токен, q4_0 — 7 488 Б. Выше обученных 262144 — `--rope-scaling yarn` с фактором
+`ctx / 262144`.
+
+| ctx | kv | rope | слоты CUDA0 / CUDA1 | свободно VRAM | decode, warm* | итог |
+| --- | --- | --- | --- | --- | --- | --- |
+| 131072 | int8 | — | 3829 / 3055 | 1374 / 1534 | 30.1, 30.7 | исходный конфиг |
+| 204800 | int8 | — | 3633 / 2827 | 1376 / 1534 | 27.4, 26.0 | стартует |
+| **262144** | **int8** | **—** | **3480 / 2650** | **1374 / 1534** | **25.5, 26.6** | **выбран: обученный предел, без yarn** |
+| 393216 | int8 | yarn 1.5 | 3131 / 2244 | 1374 / 1532 | 22.8 | стартует |
+| 524288 | int8 | yarn 2 | 2745 / 1875 | 1374 / 1532 | 20.0 | стартует; не выбран |
+| 524288 | q4_0 | yarn 2 | 3328 / 2476 | 1372 / 1532 | 23.1, 23.8 | +15 % decode, KV в 4 бита |
+| 1048576 | q4_0 | yarn 4 | 2439 / 1528 | 1372 / 1532 | 17.5 | стартует; вне меню Strata |
+
+\* один и тот же coding-промпт `merge_intervals` на 512 токенов, 2–3 прогона подряд; первый
+запрос после загрузки всегда медленнее (13–17 t/s — кэш экспертов ещё холодный), в таблице
+второй и третий. Свободная VRAM везде ~1.4/1.5 ГиБ не потому, что контекст «перестаёт
+влезать», а потому что `--expert-cache auto` сам ужимает кэш под KV: настоящая цена контекста
+— слоты и hit rate, а не свободная память. Ошибка движка, если места не останется вовсе:
+`no VRAM is left for the expert cache: it needs at least N slots`.
+
+Выводы:
+
+- **VRAM не является стеной до 512k**: движок отдаёт KV из кэша экспертов и стартует.
+  При 524288 int8 кэш держит 4620 из 24 576 профилированных пар (18.8 %), при 131072 — 6884;
+- цена — decode: 30 → 26 t/s при переходе 131k → 256k (внутри обученного), 20 t/s на 512k.
+  Для сравнения, IQ3_S на 200k даёт ~114 t/s (§5): NVFP4 на этом железе в 5–6 раз медленнее,
+  потому что 68 ГБ экспертов не влезают в RAM и 36.5 ГиБ читаются с диска;
+- `q4_0` на 512k возвращает ~1180 слотов и +15 % decode, но это уже 4-битный KV (Strata: «на
+  ~4 % быстрее и заметно менее точно на длинных документах») — оставлен как опция;
+- **1048576 при q4_0 стартует** и отвечает (3967 слотов), но Strata такого размера не
+  предлагает ни в setup, ни в пресетах, а качество на 4× обученного никто не мерил;
+- **выбран 262144**: внутри обученного диапазона (yarn не нужен), ~26 t/s против 20 на 512k,
+  и весь контекст у модели «свой», без растяжения частот. 512k и 1M остаются измеренной
+  альтернативой, а не рекомендацией.
+
+Проверка «работает ли на самом деле» (ступень 524288, не выбранная; `needle.py`, факт в
+середине промпта):
+
+| строк | токенов у сервера | глубина факта | prefill | ответ |
+| --- | --- | --- | --- | --- |
+| 5000 | 303 056 | 50 % | 1204 t/s (252 с) | `7-QX-4412`, найден |
+| 8200 | 501 456 | 95 % | 1215 t/s (413 с) | `7-QX-4412`, найден |
+
+То есть 512k не «сломался» — он работает даже на 501 456 токенах за trained 262144. Отказ от
+него — выбор в пользу скорости и обучения модели, а не техническое ограничение.
+
+### 10.3 Итоговый конфиг
+
+`install\strata-nvfp4-nvfp4.json` и обе repo-копии: `--max-context 262144 --kv int8
+--resident-budget-gib 45`, GPU 0+1, `layer_split auto`, `--expert-cache auto`,
+`--prefill auto`, MTP `--spec 4 --spec-min-p 0.5`, драфтинг — MTP, `user_args` пуст
+(rope-флаги не нужны: 262144 — обученный контекст). Sampling code-профиля:
+`0.6 / 0.8 / 20 / min_p 0 / penalties 0 / rep 1.0 / seed 1`; в reason-копии —
+`1.0 / 0.95 / 20`, `reasoning_effort: high`, `effort_position: end`.
+
+Записано скриптом (он же пишет repo-копию и бэкап):
+
+```
+python -I strata\apply_final_config.py ^
+  --config "%LOCALAPPDATA%\Strata\install\strata-nvfp4-nvfp4.json" ^
+  --repo-copy "strata\qwen3.8-flash-next-nvfp4.coding-noreason.json" ^
+  --log "C:\MyProjecs\llamacpp\logs\vfp4-coding-reason.engine.log" ^
+  --backup-name strata-nvfp4-nvfp4.json.before-final ^
+  --drafting mtp --no-draft-vocab --max-context 262144 --kv int8
+```
+
+Почему не DFlash2: **Strata отказывает ей для NVFP4**. `strata_control\drafting.py` держит
+`SUPPORTED_FAMILIES = ("qwen", "gyro", "unsloth")` и `_EXCLUDED_NAME` с `nvfp4`: даже
+`--drafting dflash2` даёт `Drafting: MTP (DFlash2 is for Qwen3.8-Flash-Next only)`, а
+`--draft*`-флаги вырезаются. У IQ3_S DFlash2 — главный источник скорости (~2×), у NVFP4
+такого рычага нет. MTP-голова пользуется своим словарём
+(`mtp\rt\draft_vocab.bin`, 106 299 токенов); `draft_vocab_en.bin` из IQ3_S-конфига к ней
+передавать нельзя.
+
+Пресет `NVFP4 256K` (`nvfp4-256k.json`) обязан совпадать с установленным конфигом по
+`context`/`kv`: если они разойдутся, `strata launch` запустит setup, и тот **перезапишет**
+`install\strata-nvfp4-nvfp4.json` по своим правилам. `--tune skip`, `tuned_preset: null` —
+старый тюнинг-пресет `f9aecd24…` привязан к 131072 и для 256k недействителен.
+Прежние launch-пресеты **«NVFP4 128K» и «NVFP4 128K (2)»** теперь устарели: их `context`
+131072 не совпадает с установленным конфигом, поэтому их запуск пересоберёт модель обратно
+на 128k (вместе с тюнингом). Пользуйтесь «NVFP4 256K»; старые можно удалить
+(`strata launch --delete-preset "NVFP4 128K (2)"` и так же для «NVFP4 128K»).
+
+### 10.4 A/B
+
+**Все замеры этого подраздела и §10.5 сделаны на ступени 524288** (тогдашний финальный
+контекст); после выбора 262144 они не повторялись — по решению владельца конфигурация
+зафиксирована без перемера. Конфиги вариантов в `strata\bench\configs-nvfp4\v0..v3.json`
+уже пересобраны под 262144, а результаты в `results\v0..v3-*.json` относятся к 524288;
+для выбранного 262144 есть собственные цифры лестницы (§10.2): слоты 3480 / 2650,
+decode 25.5–26.6 t/s на том же коротком промпте.
+
+Ключевой набор (полная таблица b0–b12 для этого размера не гонялась): окно MTP и старт без
+драфтера. `bench.py`, тот же 191k-prefill-промпт, по одному прогону на вариант
+(`results\v0-*.json` и далее, все при `--max-context 524288`):
+
+| variant | драфтер | short decode, median | depth16k | prefill 191k |
+| --- | --- | --- | --- | --- |
+| **v0 (как в конфиге)** | MTP `--spec 4` | **20.1** | 5.7 | 1159 |
+| v1 | MTP `--spec 2` | 18.6 | 10.1 | 1160 |
+| v2 | MTP `--spec 6` | 19.1 | 6.0 | 1162 |
+| v3 | без драфтера | 17.3 | 9.2 | 1221 |
+
+Разброс short decode ±10 % — шум одного прогона (§6 ничего не изменил: побитовой
+повторяемости нет, `repeatable_all: false`); глубина 16k ещё шумнее, потому что ответ — одно
+число на 5–11 токенов. Единственный воспроизводимый эффект: без драфтера медленнее
+(17.3 против 20.1), более глубокое окно (`--spec 6`) не помогает. Оставлено `--spec 4`.
+
+Контрольный прогон (`results\final-20261128-125017.json`, тот же `bench.py`, сервер через
+`strata launch --preset`, тоже на 524288) повторил v0: short decode median **20.1 t/s**,
+prefill 191k **1160 t/s**, 0 символов reasoning — no-reasoning гейт патча держит и на этой
+модели.
+
+### 10.5 Режим с рассуждениями
+
+Тот же сервер, `reasoning_effort: high`, sampling `1.0 / 0.95 / 20`, `effort_position: end`,
+драфтер MTP. Уровень на запрос — `bench.py --effort`. Замеры ниже — тоже на 524288.
+
+Таблица замеров (`r-<effort>-*.json`, max_tokens 2048/512/256, thinking тратит бюджет):
+
+| прогон | short decode (all) | depth16k (all) | prefill 191k | reasoning, символов |
+| --- | --- | --- | --- | --- |
+| r-xhigh | 16.9 | 12.4 | 1158 | 36 498 |
+| r-medium | 15.4 | 10.0 | 1146 | 29 733 |
+| r-low | 15.0 | 13.2 | 1144 | 33 712 |
+| r-off | 18.2 | 9.5 | 1160 | 0 |
+
+`decode_all` считает и токены рассуждений; `decode_tps` в thinking-прогонах бессмысленен
+(меряет только видимый ответ: 61–77 «t/s»). Уровни между собой — в пределах шума; без
+рассуждений (`off`) декод быстрее (~18 против ~15–17), потому что не тратит токены на
+`<think>`. Пустые `content` — это `warmup` с 8 токенами (все ушли в рассуждение) и, на `low`,
+ещё `prefill90k`, где 256 токенов целиком ушли в `<think>`; `answers_empty` в сводке считает
+и их.
+
+`verify_reasoning_api.py` (10 кейсов OpenAI + Anthropic): **9 checked, 0 failed** — уровни
+`off/low/medium/xhigh`, `enable_thinking=false`, Anthropic `thinking` enabled/disabled и
+`output_config.effort` отрабатывают; запрос без уровня получает конфиг-уровень `high`.
+`check_effort_cache.py`, два прогона: `xhigh → low → xhigh` на 11.1k-промпте переиспользует
+11 100 из 11 105 токенов (`cached_tokens`), стена 22.8 с (холодный) → 5.8 → 2.9 с, второй
+прогон весь прогретый (~3 с на запрос). `effort_position: end` работает и на этом шаблоне:
+уровень едет в хвосте, префикс не переписывается.
+
+Штатный `strata bench run` (`docs/BENCHMARK_PROTOCOL.md`, suite `standard-v1`, 21 запрос,
+thinking on, `--profile nvfp4-coding-reason --no-start`, сервер уже поднят; тоже на 524288;
+результат — `strata\bench\results\standard-nvfp4\`):
+
+| кейс | prompt tok/s | decode tok/s (median, n=3) | TTFT, с |
+| --- | --- | --- | --- |
+| short (~80 токенов) | не меряется | 16.5 (14.8–16.9) | 2.95 |
+| prompt-4k | 460.1 | 16.1 (15.7–16.1) | 9.02 |
+| prompt-16k | 877.5 | 15.9 (15.3–16.1) | 18.77 |
+
+21 из 21 обязательных запросов, 0 ошибок, 8 мин 46 с после загрузки модели. Sanity-проверки
+**11 из 12**: instruction 4/4, retrieval 4/4, **tool calls 3/4** — `sanity-T1` вернул 0
+структурированных tool-call'ов вместо одного. Это единственная найденная слабость конфигурации
+(модель + MTP + thinking на этом кванте), она зафиксирована здесь, а не спрятана: для
+агентных сценариев с инструментами сначала прогоните свой набор запросов, IQ3_S в этом
+месте чище.
+
+Полные числа — в `results\r-*.json`. Шаблон NVFP4-модели
+(`pack\tokenizer\chat_template.jinja`) принимает только `xhigh/medium/low` и падает на
+`high`; `serve\frontend.py` нормализует `high → xhigh`, поэтому работает всё. Преамбулу
+уровня пишет сама модель, а не `qwen-general.jinja`.
+
+### 10.6 Как пользоваться
+
+```
+:: без рассуждений: сервер + дашборд (пресет "NVFP4 256K")
+strata\run-nvfp4-coding-noreason.bat
+
+:: с рассуждениями: сервер фоном + тот же дашборд в этом окне
+strata\run-nvfp4-coding-reason.bat
+
+:: вручную
+strata launch --preset "NVFP4 256K" --plan
+strata runtime start --profile nvfp4-coding-reason --wait 900
+strata runtime stop  --profile nvfp4-coding-reason
+
+:: замеры
+python -I strata\bench\bench.py --variant final --model qwen3.8-flash-next-nvfp4-nvfp4 ^
+  --config strata\qwen3.8-flash-next-nvfp4.coding-noreason.json --out-dir strata\bench\results
+python -I strata\bench\ctxprobe\needle.py --lines 8200 --depth 0.95
+
+:: лестница контекста / варианты A-B заново
+python -I strata\bench\ctxprobe\probe.py write --ctx 262144
+strata profile use-config nvfp4-ctx-probe --from-config strata\bench\configs-nvfp4\v1.json
+python -I strata\bench\make_configs.py strata\qwen3.8-flash-next-nvfp4.coding-noreason.json ^
+  strata\bench\configs-nvfp4 --family nvfp4
+```
+
+Одновременно живёт только один сервер: обе модели и оба режима используют порт 8080 и обе
+карты.
+
+### 10.7 Ограничения
+
+- **Модель работает в low-RAM режиме.** Эксперты (68 ГБ) не влезают в 61.7 ГиБ RAM, поэтому
+  `--resident-budget-gib 45` урезается WDDM shared segment до **26.82 ГиБ**, а **36.5 ГиБ**
+  экспертов читаются из `experts.bin` при каждом запросе. Отсюда decode ~20 t/s против
+  ~114 у IQ3_S и prefill 1160 t/s против 2705. Это свойство конфигурации железа, не ошибка
+  настроек; лечится только третьей картой или большим объёмом RAM.
+- **KV живёт в VRAM** (на layer split движок не включает `--kv-resident` автоматически):
+  каждый шаг контекста отнимает слоты кэша экспертов (таблица §10.2).
+- **yarn выше 262144** — вне обученного диапазона. Needle на 501k проходит, но качество на
+  длинных дистанциях в общем виде не проверено; 512k — осознанный компромисс, 256k — «без
+  yarn и с 30 % быстрее», переключается `--max-context`/`--rope-*` и новым пресетом.
+- `1048576` при `q4_0` стартует, но Strata такого размера не предлагает; в конфиг не заведён.
+- Патч no-reasoning (`patches\apply-no-reasoning.ps1`) живёт в `serve\frontend.py` и после
+  `strata update` требует повторного применения — на NVFP4 распространяется так же, как на
+  IQ3_S. Шаблон пака (`pack\tokenizer\chat_template.jinja`) патч не трогает и трогать не
+  должен: гейт стоит в `frontend.py` и работает для любой модели.
+- Модель отвечает без repo-преамбулы `qwen-general.jinja`: она рендерит свой шаблон из пака.
+- Готовый пак на диске занимает 128 ГБ; второй такой же (NVFP4-NVIDIA, NVFP4-QAD) на C: уже
+  не поместится без чистки.

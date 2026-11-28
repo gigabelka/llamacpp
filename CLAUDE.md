@@ -941,6 +941,28 @@ alone, both RTX 5060 Ti), chosen by which `.bat` is started — one server at a 
   It cannot use `strata launch`: a preset is per model, and `launch` always starts from the
   installed config, so two presets cannot differ in thinking.
 
+**A second model, added 2026-11-28: the NVFP4-GPTQ pack.** `install\strata-nvfp4-nvfp4.json`
+serves `Strata-data\models\Maximilian228--Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata\` (128 GB:
+NVFP4-GPTQ experts in `pack\experts.bin`, a Q8_0/BF16 dense GGUF, an FP8 PLE table and a
+Q2_0 MTP head). Two more launchers, same port and cards: `strata/run-nvfp4-coding-noreason.bat`
+→ `strata launch --preset "NVFP4 256K"` and `strata/run-nvfp4-coding-reason.bat` → the profile
+`nvfp4-coding-reason`, exactly like the IQ3_S pair. Its configuration is
+`--max-context 262144 --kv int8` (the trained ceiling, no rope scaling) with MTP `--spec 4`;
+the search measured 524288 int8 with yarn 2 (starts, needle passes at 501k, ~20 t/s) and
+1048576 q4_0 (starts, ~17 t/s), and 262144 was chosen on purpose: 30 % faster and inside the
+trained range. Repo copies are `strata/qwen3.8-flash-next-nvfp4.coding-{noreason,reason}.json`,
+the preset is `%APPDATA%\Strata\launch-presets\nvfp4-256k.json`, and README §10 has the ladder,
+the A/B (`--spec 2/4/6`, no drafter) and the needle checks. DFlash2 is **refused** for this
+model (`strata_control\drafting.py`: `SUPPORTED_FAMILIES` excludes nvfp4 and `_EXCLUDED_NAME`
+matches `nvfp4`), so MTP is the only drafter and its own vocabulary must not be replaced with
+`draft_vocab_en.bin`. The measured price: 68 GB of experts do not fit 61.7 GiB of RAM, the WDDM
+shared segment clamps `--resident-budget-gib 45` to 26.82 GiB, 36.5 GiB of experts are read
+from disk — decode is several times slower than IQ3_S. A preset whose `context`/`kv` differ
+from the installed config makes `strata launch` re-run setup and rewrite that installed config;
+keep the two equal (the old `NVFP4 128K`/`NVFP4 128K (2)` presets are now stale for that
+reason). `strata bench run --profile` does not check that the server on the address is the
+profile's — stop other servers first.
+
 Thinking is off unless the **server process** sees `STRATA_ALLOW_THINKING=1`. Our patch
 `strata/patches/apply-no-reasoning.ps1` edits `terminal\current\serve\frontend.py` (both dialects)
 and `chat_template.jinja`: without the variable it forces `enable_thinking=False` and the template

@@ -1,6 +1,6 @@
-"""Build the A/B run configs for Qwen3.8-Flash-Next IQ3_S from an installed/repository run config.
+"""Build the A/B run configs for a Strata model from an installed/repository run config.
 
-Usage: python make_configs.py <base-config.json> <out-dir> [--family noreason|reason]
+Usage: python make_configs.py <base-config.json> <out-dir> [--family noreason|reason|nvfp4]
 
 Each variant is a full copy of the base config with the top-level keys the
 Strata server reads (drafting, draft_vocab, reasoning_effort, effort_position,
@@ -10,6 +10,10 @@ sampling), the person's engine options in user_args, and an engine log in the re
 --family noreason (the default) writes the b0..b12 table of the 2026-11-27 report.
 --family reason writes the r0..r2 table of the reasoning configuration: the same
 engine, context and drafter, sampling/level/effort_position as the variables.
+--family nvfp4 writes the v0..v3 table of the NVFP4 model: the MTP's verify window
+(--spec 2/4/6) and the start without a drafter. DFlash2 is not an arm: Strata refuses it
+for NVFP4 (strata_control/drafting.py, SUPPORTED_FAMILIES and _EXCLUDED_NAME) and the
+server falls back to MTP with "DFlash2 is for Qwen3.8-Flash-Next only".
 """
 import argparse
 import json
@@ -18,7 +22,7 @@ from pathlib import Path
 ap = argparse.ArgumentParser()
 ap.add_argument("base")
 ap.add_argument("out")
-ap.add_argument("--family", choices=("noreason", "reason"), default="noreason")
+ap.add_argument("--family", choices=("noreason", "reason", "nvfp4"), default="noreason")
 a = ap.parse_args()
 
 BASE = Path(a.base)
@@ -73,6 +77,15 @@ REASON_VARIANTS = [
     ("r2", 1.0, 0.95, "start"),    # effort in the system block: what a level switch costs in cache
 ]
 
+# id, drafting, extra user args. The MTP's verify window is --spec (4 in the installed
+# config); a --spec in user_args replaces that pair, it does not add a second one.
+NVFP4_VARIANTS = [
+    ("v0", "mtp", []),                    # the installed config as it stands
+    ("v1", "mtp", ["--spec", "2"]),       # shorter window: fewer drafts, cheaper verification
+    ("v2", "mtp", ["--spec", "6"]),       # deeper window: more drafts, lower acceptance likely
+    ("v3", "off", []),                    # no drafter at all: the price of speculation
+]
+
 base = json.loads(BASE.read_text(encoding="utf-8-sig"))
 
 if a.family == "reason":
@@ -88,6 +101,21 @@ if a.family == "reason":
         path = OUT / f"{vid}.json"
         path.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
         print(f"{path}  reasoning_effort={cfg['reasoning_effort']} effort_position={position} temp={temperature} top_p={top_p}")
+elif a.family == "nvfp4":
+    for vid, drafting_mode, extra in NVFP4_VARIANTS:
+        cfg = json.loads(json.dumps(base))
+        cfg["reasoning_effort"] = "none"
+        cfg.pop("draft_vocab", None)
+        cfg["drafting"] = drafting_mode
+        cfg["sampling"] = dict(CODING)
+        # the rope flags (if any) come from the base config's user_args and stay
+        cfg["user_args"] = list(base.get("user_args") or []) + list(extra)
+        cfg["log"] = str(LOGS / f"{vid}.engine.log")
+        cfg["port"] = 8080
+        cfg["host"] = "127.0.0.1"
+        path = OUT / f"{vid}.json"
+        path.write_text(json.dumps(cfg, indent=1), encoding="utf-8")
+        print(f"{path}  drafting={drafting_mode} user_args={cfg['user_args']}")
 else:
     for vid, drafting_mode, conf, vocab, sampling, extra in NORESON_VARIANTS:
         cfg = json.loads(json.dumps(base))

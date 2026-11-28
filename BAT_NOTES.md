@@ -529,3 +529,71 @@ config, requests asking `reasoning_effort: low` and `xhigh`) it returned `reason
 the gate overrides the config level and the request alike. Measurements and the harness provider:
 strata/README.md section 9 and CC-Switch.md.
 
+
+## strata/run-nvfp4-coding-noreason.bat
+
+Starts Strata through its own launcher, `terminal\current\bin\strata.cmd launch --preset
+"NVFP4 256K"`: the preset starts the model and opens the terminal monitor, as for the IQ3_S
+no-reasoning launcher. The model is `Maximilian228/Qwen3.8-Flash-Next-NVFP4-GPTQ-Strata`
+(NVFP4-GPTQ routed experts, Q8_0/BF16 dense side, FP8 PLE table), context 262144 (the trained
+ceiling), `kv int8`, no rope scaling, MTP alone (`--spec 4`), no reasoning, sampling
+0.6 / 0.8 / 20 / min_p 0 / penalties 0 / seed 1 (strata/README.md section 10).
+
+The parameters come from the installed run config
+`%LOCALAPPDATA%\Strata\install\strata-nvfp4-nvfp4.json`, which `strata launch` rebuilds the
+session from; `strata/apply_final_config.py` writes it (the call is in section 10 of the
+README, with `--drafting mtp --no-draft-vocab --max-context 262144 --kv int8`).
+The preset file is `%APPDATA%\Strata\launch-presets\nvfp4-256k.json` (hand-written, schema
+`strata.launch/1`) and its `context`/`kv` must equal the installed config's, otherwise
+`strata launch` re-runs setup and rewrites that installed config: that is how the launcher
+avoids a second setup pass.
+
+DFlash2 is deliberately absent: Strata refuses it for the NVFP4 family
+(`strata_control/drafting.py`, `SUPPORTED_FAMILIES` and the `nvfp4` name exclusion) and the
+server falls back to the MTP with `DFlash2 is for Qwen3.8-Flash-Next only`. The MTP drafts
+from its own vocabulary (`Strata-data\mtp\rt\draft_vocab.bin`, 106 299 tokens); the DFlash2
+subset `draft_vocab_en.bin` must not be passed to it.
+
+Stop from the monitor's `q`, `strata launch --stop --preset "NVFP4 256K"`, or by closing
+the window after the question. Engine log: `%LOCALAPPDATA%\Strata\launch\nvfp4-512k.engine.log`;
+server log: `%LOCALAPPDATA%\Strata\runtime\launch-nvfp4-512k.server.log`. Only one server runs
+at a time: both models and both thinking modes share port 8080 and both cards.
+
+The bench and needle runs in strata/README.md section 10 were made on the 524288 rung (then the
+chosen context; 20.1 t/s short decode, 1159 t/s prefill at 191k, a needle found at 501 456
+tokens). The configuration was then fixed at 262144 int8 — the trained ceiling, no yarn — and
+was not benchmarked again on purpose. The ladder's own row for 262144 is the reference:
+3480 / 2650 expert slots, 25.5–26.6 t/s on the same short prompt (§10.2).
+
+## strata/run-nvfp4-coding-reason.bat
+
+The reasoning twin of the NVFP4 launcher: same model, engine, context (262144), `kv int8`,
+yarn 2 and MTP, but thinking ON at the template's `xhigh` level (`reasoning_effort: high`
+in the config) and the model card's thinking-mode samplers
+`temperature 1.0 / top_p 0.95 / top_k 20 / min_p 0 / penalties 0 / repetition 1.0 / seed 1`
+(strata/README.md section 10).
+
+It does not use `strata launch --preset`, for the same reason as the IQ3_S reason launcher:
+the preset and `strata launch` rebuild the engine config from the single installed config,
+which this model shares with the no-reasoning launcher, so two presets cannot differ in
+thinking. The script saves its own run config as a managed background profile
+(`nvfp4-coding-reason`, created from `strata/qwen3.8-flash-next-nvfp4.coding-reason.json`
+on the first run), waits for readiness and opens the same monitor in its one console.
+
+`set STRATA_ALLOW_THINKING=1` is the gate the no-reasoning patch
+(`strata/patches/apply-no-reasoning.ps1`) reads in `serve\frontend.py`; nothing else sets it,
+so the preset launcher above keeps the hard off. `strata update` replaces `serve\` and the
+patch must be re-applied (README section 4). Engine log:
+`C:\MyProjecs\llamacpp\logs\vfp4-coding-reason.engine.log` (the config's `log` field;
+`logs\` is gitignored); server output:
+`%LOCALAPPDATA%\Strata\runtime\nvfp4-coding-reason.server.log`.
+
+The NVFP4 chat template (the pack's own `pack\tokenizer\chat_template.jinja`) raises on any
+`reasoning_effort` other than `xhigh/medium/low`; `serve\frontend.py` maps `high -> xhigh`,
+`minimal/off/none -> enable_thinking=false`, so the reachable set is the template's own. The
+reasoning block it renders is the model's, not `qwen-general.jinja`'s: no repo preamble
+reaches this model.
+
+Stop with `strata runtime stop --profile nvfp4-coding-reason`; the monitor's `q` only
+detaches. A rerun while the profile is `ready` or `starting` skips the start and opens the
+monitor. Measurements and the harness provider: strata/README.md section 10 and CC-Switch.md.
